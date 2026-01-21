@@ -1,9 +1,13 @@
 # Especificação Técnica: PWA de Ouvidoria Acessível
-**Projeto**: `Participa-DF`
-**Autores**: Rafael da Silva Oliveira, Wallison Chagas Lucas e Breno Braga Galvão
-**Versão**: 1.0
-**Data**: 20 de Janeiro de 2026
 
+#### **Projeto**: `Participa-DF`
+#### **Autores**: 
+- Rafael da Silva Oliveira -
+<a href="https://www.linkedin.com/in/rafael-da-silva-oliveira-623634184/" target="blank">Linkedin<img src="https://raw.githubusercontent.com/rahuldkjain/github-profile-readme-generator/master/src/images/icons/Social/linked-in-alt.svg" alt="https://www.linkedin.com/in/rafael-da-silva-oliveira-623634184/" height="15" width="50" /></a>
+
+- Wallison Chagas Lucas - <a href="https://www.linkedin.com/in/wallison-lucas-410483239/" target="blank">Linkedin<img src="https://raw.githubusercontent.com/rahuldkjain/github-profile-readme-generator/master/src/images/icons/Social/linked-in-alt.svg" alt="https://www.linkedin.com/in/rafael-da-silva-oliveira-623634184/" height="15" width="50" /></a>
+
+- Breno Braga Galvão - <a href="https://www.linkedin.com/in/breno-braga-galv%C3%A3o/" target="blank">Linkedin<img src="https://raw.githubusercontent.com/rahuldkjain/github-profile-readme-generator/master/src/images/icons/Social/linked-in-alt.svg" alt="https://www.linkedin.com/in/rafael-da-silva-oliveira-623634184/" height="15" width="50" /></a>
 ---
 
 ## 1. Introdução e Objetivos
@@ -34,7 +38,7 @@ A arquitetura proposta desacopla o frontend do backend, garantindo escalabilidad
 
 O diagrama abaixo ilustra a interação entre os principais componentes do sistema, desde o usuário até os serviços de backend e a infraestrutura de deploy.
 
-![Diagrama de Arquitetura Geral](Diagramas/architecture.png)
+![Diagrama de Arquitetura Geral](docs/diagramas/arquitetura.png)
 
 ---
 
@@ -46,7 +50,7 @@ O frontend será uma Single Page Application (SPA) construída com Vue.js, trans
 
 A aplicação será modularizada em componentes reutilizáveis, seguindo as melhores práticas do Vue.js.
 
-![Diagrama de Componentes Frontend](Diagramas/componentes_frontend.png)
+![Diagrama de Componentes Frontend](docs/diagramas/componentes_frontend.png)
 
 ### 3.2. Estratégia de PWA e Offline-First
 
@@ -82,7 +86,7 @@ O backend será uma API RESTful construída com FastAPI, responsável pela lógi
 
 A API será organizada em rotas lógicas para gerenciar manifestações, protocolos e autenticação (se aplicável).
 
-![Diagrama de Endpoints da API](Diagramas/endpoints_api.png)
+![Diagrama de Endpoints da API](docs/diagramas/endpoints_api.png)
 
 ### 4.2. Processamento de Mídia
 
@@ -105,7 +109,7 @@ O banco de dados relacional (PostgreSQL) armazenará todas as informações de f
 
 O diagrama abaixo descreve as tabelas principais e seus relacionamentos.
 
-![Diagrama do Modelo de Dados](Diagramas/modelo_dados.png)
+![Diagrama do Modelo de Dados](docs/diagramas/modelo_dados.png)
 
 ---
 
@@ -113,7 +117,7 @@ O diagrama abaixo descreve as tabelas principais e seus relacionamentos.
 
 O diagrama de sequência a seguir detalha o fluxo de uma manifestação, desde a criação pelo cidadão até o processamento no backend, incluindo o modo offline.
 
-![Diagrama de Fluxo de Dados](Diagramas/fluxo_dados.png)
+![Diagrama de Fluxo de Dados](docs/diagramas/fluxo_dados.png)
 
 ---
 
@@ -125,11 +129,3 @@ O diagrama de sequência a seguir detalha o fluxo de uma manifestação, desde a
 
 ---
 
-## 8. Próximos Passos
-
-1.  **Configuração do Ambiente**: Criar o repositório no GitHub e configurar os projetos Vue.js e FastAPI.
-2.  **Desenvolvimento do Backend**: Implementar os endpoints da API e o modelo de dados.
-3.  **Desenvolvimento do Frontend**: Criar os componentes Vue.js, a lógica de PWA e a interface do usuário.
-4.  **Integração**: Conectar o frontend com o backend e a API da IZA.
-5.  **Testes**: Realizar testes de usabilidade, acessibilidade e funcionalidade.
-6.  **Documentação e Vídeo**: Criar o `README.md` detalhado e gravar o vídeo de demonstração.
