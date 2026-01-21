@@ -101,10 +101,6 @@ docker run -p 8000:8000 participa-df-backend
 
 Veja `.env.example` para todas as configurações disponíveis.
 
-## Contribuindo
-
-Veja [CONTRIBUTING.md](../CONTRIBUTING.md) para diretrizes.
-
 ## Licença
 
 MIT License

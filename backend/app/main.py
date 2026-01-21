@@ -6,9 +6,18 @@ FastAPI Application
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from app.database import engine
+from app.models.manifestacao import Base as ManifestacaoBase
+from app.models.protocolo import Base as ProtocoloBase
+from app.models.usuario import Base as UsuarioBase
 import logging
 
 from app.config import settings
+
+# Criar tabelas
+ManifestacaoBase.metadata.create_all(bind=engine)
+ProtocoloBase.metadata.create_all(bind=engine)
+UsuarioBase.metadata.create_all(bind=engine)
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
