@@ -1,23 +1,34 @@
 """
-Participa-DF Backend - Entry Point
+ Desafio Participa-DF-OUV Backend - Entry Point
 FastAPI Application
 """
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles 
 from contextlib import asynccontextmanager
+import os 
+
 from app.database import engine
+# Importando todos os modelos para criar as tabelas
 from app.models.manifestacao import Base as ManifestacaoBase
 from app.models.protocolo import Base as ProtocoloBase
 from app.models.usuario import Base as UsuarioBase
+from app.models.assunto import Base as AssuntoBase
+from app.models.anexo import Base as AnexoBase
+from app.models.movimentacao import Base as MovimentacaoBase
+from app.routes import health, assuntos, manifestacoes, protocolos, auth, movimentacoes
 import logging
 
 from app.config import settings
 
-# Criar tabelas
+# Criar tabelas no banco de dados (caso não existam)
 ManifestacaoBase.metadata.create_all(bind=engine)
 ProtocoloBase.metadata.create_all(bind=engine)
 UsuarioBase.metadata.create_all(bind=engine)
+AssuntoBase.metadata.create_all(bind=engine)
+AnexoBase.metadata.create_all(bind=engine)
+MovimentacaoBase.metadata.create_all(bind=engine)
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -29,20 +40,26 @@ async def lifespan(app: FastAPI):
     """
     Gerenciar o ciclo de vida da aplicação
     """
-    logger.info("Iniciando Participa-DF Backend")
+    # 1. Garantir que a pasta de uploads exista ao iniciar
+    # Isso evita erro 500 se o StaticFiles tentar montar uma pasta inexistente
+    if not os.path.exists("uploads"):
+        os.makedirs("uploads")
+        logger.info("Pasta 'uploads' criada com sucesso.")
+
+    logger.info("Iniciando Participa-DF-OUV Backend")
     yield
-    logger.info("Encerrando Participa-DF Backend")
+    logger.info("Encerrando Participa-DF-OUV Backend")
 
 
 # Criar aplicação FastAPI
 app = FastAPI(
-    title="Participa-DF API",
+    title="Desafio Participa-DF-OUV API",
     description="API de Ouvidoria Acessível para o Participa DF",
     version="1.0.0",
     lifespan=lifespan,
 )
 
-# Configurar CORS
+# Configurar CORS (Permite que o Frontend acesse o Backend)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -51,29 +68,39 @@ app.add_middleware(
     allow_headers=settings.CORS_ALLOW_HEADERS,
 )
 
+# ==============================================================================
+# ARQUIVOS ESTÁTICOS (IMAGENS)
+# ==============================================================================
+# Isso permite acessar http://localhost:8000/uploads/nome_da_imagem.png
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-@app.get("/")
+
+# ==============================================================================
+# ROTAS DA API
+# ==============================================================================
+app.include_router(health.router)
+app.include_router(auth.router)
+app.include_router(assuntos.router)
+app.include_router(manifestacoes.router)
+app.include_router(protocolos.router) 
+app.include_router(movimentacoes.router)
+
+
+@app.get("/", include_in_schema=False)
 async def root():
     """
-    Rota raiz da API
+    Rota raiz da API (apenas informativo)
     """
     return {
-        "message": "Bem-vindo ao Participa-DF API",
+        "message": "Bem-vindo ao Participa-DF-OUV API",
         "version": "1.0.0",
         "docs": "/docs",
         "health": "/api/health",
-    }
-
-
-@app.get("/api/health")
-async def health():
-    """
-    Health check endpoint
-    """
-    return {
-        "status": "healthy",
-        "service": "Participa-DF API",
-        "version": "1.0.0",
+        "endpoints": {
+            "assuntos": "/api/assuntos",
+            "manifestacoes": "/api/manifestacoes",
+            "protocolos": "/api/protocolos",
+        }
     }
 
 

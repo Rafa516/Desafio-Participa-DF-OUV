@@ -1,60 +1,142 @@
 """
-Rotas de Manifestações
+Rotas de Manifestações (Controller)
+Arquivo: backend/app/routes/manifestacoes.py
+Responsabilidade: Lidar com HTTP, Upload de arquivos físicos e chamar o Service.
 """
 
-from fastapi import APIRouter, UploadFile, File, Form
-from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Form, File, UploadFile
+from sqlalchemy.orm import Session
+from typing import List
+import os
+import shutil
+from uuid import uuid4
 
-router = APIRouter()
+from app.database import get_db
+from app.services.manifestacao_service import ManifestacaoService 
+from app.schemas.manifestacao import (
+    ManifestacaoCreate,
+    ManifestacaoResponse,
+    ManifestacaoListResponse,
+    ClassificacaoManifestacaoSchema
+)
+
+# ==============================================================================
+# CONFIGURAÇÃO DO ROTEADOR
+# ==============================================================================
+router = APIRouter(
+    prefix="/api/manifestacoes",
+    tags=["Manifestações"]
+)
+
+# ==============================================================================
+# CONFIGURAÇÃO DE DIRETÓRIO
+# ==============================================================================
+UPLOAD_DIR = "uploads"
+if not os.path.exists(UPLOAD_DIR):
+    os.makedirs(UPLOAD_DIR)
 
 
-@router.post("/manifestacoes")
-async def criar_manifestacao(
-    titulo: str = Form(...),
-    descricao_texto: Optional[str] = Form(None),
+# ==============================================================================
+# ROTA: CRIAR MANIFESTAÇÃO (POST)
+# ==============================================================================
+@router.post(
+    "/", 
+    response_model=ManifestacaoResponse, 
+    status_code=status.HTTP_201_CREATED,
+    summary="Criar nova manifestação"
+)
+def criar_manifestacao(
+    relato: str = Form(..., min_length=10, description="Descreva o ocorrido"),
+    assunto_id: str = Form(..., description="ID do assunto"),
+    classificacao: ClassificacaoManifestacaoSchema = Form(ClassificacaoManifestacaoSchema.RECLAMACAO),
     anonimo: bool = Form(False),
-    arquivo_audio: Optional[UploadFile] = File(None),
-    arquivo_video: Optional[UploadFile] = File(None),
-    arquivo_imagem: Optional[UploadFile] = File(None),
+    arquivos: List[UploadFile] = File(None),
+    db: Session = Depends(get_db)
 ):
     """
-    Criar nova manifestação
+    Recebe os dados do formulário e arquivos, salva os arquivos no disco
+    e delega a criação do registro no banco para o ManifestacaoService.
+    """
     
-    - **titulo**: Título da manifestação
-    - **descricao_texto**: Descrição em texto
-    - **anonimo**: Se a manifestação é anônima
-    - **arquivo_audio**: Arquivo de áudio (opcional)
-    - **arquivo_video**: Arquivo de vídeo (opcional)
-    - **arquivo_imagem**: Arquivo de imagem (opcional)
-    """
+    # 1. Validar dados do formulário (Pydantic)
+    try:
+        manifestacao_validada = ManifestacaoCreate(
+            relato=relato,
+            assunto_id=assunto_id,
+            classificacao=classificacao,
+            anonimo=anonimo,
+            dados_complementares={} 
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    # 2. Processar Uploads Físicos (Salvar no Disco)
+    arquivos_processados = []
+    
+    if arquivos:
+        try:
+            for arquivo in arquivos:
+                # Gerar nome único: UUID + Nome Original
+                nome_unico = f"{uuid4()}_{arquivo.filename}"
+                caminho_completo = os.path.join(UPLOAD_DIR, nome_unico)
+                
+                # Salvar arquivo fisicamente
+                with open(caminho_completo, "wb") as buffer:
+                    shutil.copyfileobj(arquivo.file, buffer)
+                
+                # Obter metadados para passar ao Service
+                tamanho_bytes = os.path.getsize(caminho_completo)
+                
+                arquivos_processados.append({
+                    "caminho": caminho_completo, # Caminho relativo ou absoluto
+                    "tipo": arquivo.content_type,
+                    "tamanho": tamanho_bytes
+                })
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Erro ao fazer upload de arquivos: {str(e)}")
+
+    # 3. Chamar o Service para Regra de Negócio (Banco de Dados)
+    try:
+        nova_manifestacao = ManifestacaoService.criar_manifestacao(
+            db=db,
+            manifestacao_data=manifestacao_validada,
+            arquivos_metadata=arquivos_processados
+        )
+        return nova_manifestacao
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro interno ao criar manifestação: {str(e)}")
+
+
+# ==============================================================================
+# ROTA: LISTAR MANIFESTAÇÕES (GET)
+# ==============================================================================
+@router.get("/", response_model=ManifestacaoListResponse)
+def listar_manifestacoes(
+    skip: int = Query(0),
+    limit: int = Query(10),
+    db: Session = Depends(get_db)
+):
+    # O Service retorna uma tupla (lista, total)
+    lista, total = ManifestacaoService.listar_manifestacoes(db, skip, limit)
+    
     return {
-        "message": "Manifestação criada com sucesso",
-        "protocolo": "OUVIDORIA-20260120-XXXXXX",
-        "status": "pendente",
-    }
-
-
-@router.get("/manifestacoes/{protocolo}")
-async def consultar_manifestacao(protocolo: str):
-    """
-    Consultar manifestação por protocolo
-    """
-    return {
-        "protocolo": protocolo,
-        "titulo": "Exemplo de manifestação",
-        "status": "em_processamento",
-        "data_criacao": "2026-01-20",
-    }
-
-
-@router.get("/manifestacoes")
-async def listar_manifestacoes(skip: int = 0, limit: int = 10):
-    """
-    Listar manifestações com paginação
-    """
-    return {
-        "total": 0,
+        "total": total,
         "skip": skip,
         "limit": limit,
-        "manifestacoes": [],
+        "manifestacoes": lista
     }
+
+
+# ==============================================================================
+# ROTA: CONSULTAR POR PROTOCOLO (GET)
+# ==============================================================================
+@router.get("/{protocolo}", response_model=ManifestacaoResponse)
+def consultar_manifestacao(protocolo: str, db: Session = Depends(get_db)):
+    
+    manifestacao = ManifestacaoService.obter_manifestacao(db, protocolo)
+    
+    if not manifestacao:
+        raise HTTPException(status_code=404, detail="Manifestação não encontrada")
+    
+    return manifestacao

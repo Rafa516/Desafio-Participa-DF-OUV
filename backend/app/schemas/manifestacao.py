@@ -1,19 +1,26 @@
 """
 Pydantic schemas para validação de dados de Manifestacao
+Arquivo: backend/app/schemas/manifestacao.py
 """
 
 from pydantic import BaseModel, Field, validator
-from typing import Optional
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from enum import Enum
 
 
-class TipoManifestacaoSchema(str, Enum):
-    """Tipos de manifestação"""
-    TEXTO = "texto"
-    AUDIO = "audio"
-    VIDEO = "video"
-    IMAGEM = "imagem"
+# ==============================================================================
+# ENUMS 
+# ==============================================================================
+
+class ClassificacaoManifestacaoSchema(str, Enum):
+    """Classificação conforme Instrução Normativa"""
+    RECLAMACAO = "reclamacao"
+    DENUNCIA = "denuncia"
+    ELOGIO = "elogio"
+    SUGESTAO = "sugestao"
+    INFORMACAO = "informacao"
+    SOLICITACAO = "solicitacao"
 
 
 class StatusManifestacaoSchema(str, Enum):
@@ -25,45 +32,77 @@ class StatusManifestacaoSchema(str, Enum):
     REJEITADA = "rejeitada"
 
 
+# ==============================================================================
+# SCHEMAS DE ENTRADA (Input)
+# ==============================================================================
+
 class ManifestacaoCreate(BaseModel):
-    """Schema para criação de manifestação"""
-    titulo: str = Field(..., min_length=5, max_length=255)
-    descricao_texto: Optional[str] = Field(None, max_length=12998)
-    tipo_principal: TipoManifestacaoSchema = TipoManifestacaoSchema.TEXTO
+    """
+    Schema para validação da ENTRADA de dados (Criação)
+    """
+    relato: str = Field(..., min_length=10, max_length=13000, description="O texto principal da manifestação")
+    assunto_id: str = Field(..., min_length=1, description="ID do assunto selecionado")
+    classificacao: ClassificacaoManifestacaoSchema = ClassificacaoManifestacaoSchema.RECLAMACAO
+    dados_complementares: Optional[Dict[str, Any]] = None
     anonimo: bool = False
 
-    @validator('titulo')
-    def titulo_nao_vazio(cls, v):
+    @validator('relato')
+    def relato_nao_vazio(cls, v):
+        """Garante que o relato não seja apenas espaços em branco"""
         if not v.strip():
-            raise ValueError('Título não pode ser vazio')
+            raise ValueError('Relato não pode ser vazio')
         return v.strip()
 
 
 class ManifestacaoUpdate(BaseModel):
     """Schema para atualização de manifestação"""
     status: Optional[StatusManifestacaoSchema] = None
-    descricao_texto: Optional[str] = Field(None, max_length=12998)
+    dados_complementares: Optional[Dict[str, Any]] = None
+
+
+# ==============================================================================
+# SCHEMAS DE SAÍDA (Response)
+# ==============================================================================
+
+class AnexoResponse(BaseModel):
+    """
+    Schema para formatar a SAÍDA dos dados de Anexos
+    """
+    id: str
+    arquivo_url: str
+    tipo_arquivo: str
+    tamanho: int
+    data_upload: datetime
+
+    class Config:
+        from_attributes = True
 
 
 class ManifestacaoResponse(BaseModel):
-    """Schema para resposta de manifestação"""
+    """
+    Schema para formatar a SAÍDA completa da Manifestação
+    """
     id: str
     protocolo: str
-    titulo: str
-    descricao_texto: Optional[str]
-    tipo_principal: TipoManifestacaoSchema
+    relato: str
+    assunto_id: str
+    classificacao: ClassificacaoManifestacaoSchema
+    dados_complementares: Optional[Dict[str, Any]]
     anonimo: bool
-    status: StatusManifestacaoSchema
+    status: str # Usando str aqui para evitar conflito se o banco retornar algo levemente diferente
     data_criacao: datetime
     data_atualizacao: Optional[datetime]
+    
+    # Lista de anexos aninhada na resposta
+    anexos: List[AnexoResponse] = []
 
     class Config:
         from_attributes = True
 
 
 class ManifestacaoListResponse(BaseModel):
-    """Schema para listagem de manifestações"""
+    """Schema para listagem paginada"""
     total: int
     skip: int
     limit: int
-    manifestacoes: list[ManifestacaoResponse]
+    manifestacoes: List[ManifestacaoResponse]

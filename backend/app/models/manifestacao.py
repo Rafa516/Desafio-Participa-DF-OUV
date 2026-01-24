@@ -2,20 +2,21 @@
 Manifestacao model - SQLAlchemy ORM
 """
 
-from sqlalchemy import Column, String, Text, DateTime, Boolean, Enum, ForeignKey
+from sqlalchemy import Column, String, Text, DateTime, Boolean, Enum, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from datetime import datetime
 import enum
 from app.models import Base
 
 
-class TipoManifestacao(str, enum.Enum):
-    """Tipos de manifestação suportados"""
-    TEXTO = "texto"
-    AUDIO = "audio"
-    VIDEO = "video"
-    IMAGEM = "imagem"
+class ClassificacaoManifestacao(str, enum.Enum):
+    """Classificação da manifestação conforme Instrução Normativa"""
+    RECLAMACAO = "reclamacao"
+    DENUNCIA = "denuncia"
+    ELOGIO = "elogio"
+    SUGESTAO = "sugestao"
+    INFORMACAO = "informacao"
+    SOLICITACAO = "solicitacao"
 
 
 class StatusManifestacao(str, enum.Enum):
@@ -38,14 +39,9 @@ class Manifestacao(Base):
     protocolo = Column(String(50), unique=True, index=True, nullable=False)
 
     # Conteúdo
-    titulo = Column(String(255), nullable=False)
-    descricao_texto = Column(Text, nullable=True)
-    tipo_principal = Column(Enum(TipoManifestacao), default=TipoManifestacao.TEXTO)
-
-    # Arquivos
-    caminho_audio = Column(String(500), nullable=True)
-    caminho_video = Column(String(500), nullable=True)
-    caminho_imagem = Column(String(500), nullable=True)
+    relato = Column(Text, nullable=False)
+    dados_complementares = Column(JSON, nullable=True)
+    classificacao = Column(Enum(ClassificacaoManifestacao), default=ClassificacaoManifestacao.RECLAMACAO)
 
     # Metadados
     anonimo = Column(Boolean, default=False)
@@ -57,8 +53,17 @@ class Manifestacao(Base):
     data_conclusao = Column(DateTime(timezone=True), nullable=True)
 
     # Relacionamentos
+    assunto_id = Column(String(36), ForeignKey("assuntos.id"), nullable=False)
+    assunto = relationship("Assunto", back_populates="manifestacoes")
+    
+    # FK para usuario é opcional (para manifestações anônimas)
     usuario_id = Column(String(36), ForeignKey("usuarios.id"), nullable=True)
     usuario = relationship("Usuario", back_populates="manifestacoes")
+    
+    anexos = relationship("Anexo", back_populates="manifestacao", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Manifestacao(protocolo={self.protocolo}, status={self.status})>"
+    
+    movimentacoes = relationship("Movimentacao", back_populates="manifestacao", cascade="all, delete-orphan")
+

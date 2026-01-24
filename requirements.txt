@@ -3,6 +3,7 @@ fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
 pydantic>=2.10.0
 pydantic-settings>=2.6.0
+email-validator>=2.1.0
 
 # Banco de dados
 sqlalchemy>=2.0.30
@@ -15,6 +16,7 @@ redis>=5.0.1
 # Autenticação e segurança
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
+bcrypt
 python-multipart>=0.0.9
 
 # Integração com APIs externas

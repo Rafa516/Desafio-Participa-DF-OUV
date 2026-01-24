@@ -2,12 +2,13 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
-    container_name: participa-df-postgres
+    container_name: participadf-ouv-postgres
     restart: always
     environment:
-      POSTGRES_USER: participa_user
+      POSTGRES_USER: 
+      
       POSTGRES_PASSWORD: participa_password
-      POSTGRES_DB: participa_df
+      POSTGRES_DB: participadf_ouv_db
     ports:
       - "5432:5432"
     volumes:
@@ -21,7 +22,7 @@ services:
   # Redis Cache
   redis:
     image: redis:7-alpine
-    container_name: participa-df-redis
+    container_name: participadf-ouv-redis
     restart: always
     ports:
       - "6379:6379"
@@ -39,10 +40,10 @@ services:
       
       context: . 
       dockerfile: Dockerfile
-    container_name: participa-df-backend
+    container_name: participadf-ouv-backend
     restart: always
     environment:
-      DATABASE_URL: postgresql://participa_user:participa_password@postgres:5432/participa_df
+      DATABASE_URL: postgresql://participa_user:participa_password@postgres:5432/participadf_ouv_db
       REDIS_URL: redis://redis:6379/0
       DEBUG: "True"
       ENVIRONMENT: development

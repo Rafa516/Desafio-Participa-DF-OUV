@@ -1,6 +1,6 @@
 # Especificação Técnica: PWA de Ouvidoria Acessível
 
-#### **Projeto**: `Participa-DF`
+#### **Projeto**: `Participa-DF-OUV`
 #### **Autores**: 
 - Rafael da Silva Oliveira -
 <a href="https://www.linkedin.com/in/rafael-da-silva-oliveira-623634184/" target="blank">Linkedin<img src="https://raw.githubusercontent.com/rahuldkjain/github-profile-readme-generator/master/src/images/icons/Social/linked-in-alt.svg" alt="https://www.linkedin.com/in/rafael-da-silva-oliveira-623634184/" height="15" width="50" /></a>
@@ -38,8 +38,58 @@ A arquitetura proposta desacopla o frontend do backend, garantindo escalabilidad
 
 O diagrama abaixo ilustra a interação entre os principais componentes do sistema, desde o usuário até os serviços de backend e a infraestrutura de deploy.
 
-![Diagrama de Arquitetura Geral](docs/diagramas/arquitetura.png)
 
+```mermaid
+   flowchart LR
+    %% Definição de Estilos
+    classDef frontend fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#0d47a1
+    classDef backend fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#e65100
+    classDef data fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#4a148c
+    classDef external fill:#eeeeee,stroke:#9e9e9e,stroke-width:2px,stroke-dasharray: 5 5
+
+    subgraph Client ["Frontend PWA (Vue.js)"]
+        direction TB
+        UI["Interface do Usuário"]:::frontend
+        Chat["Chatbot Assistente IZA"]:::frontend
+        Store["Estado Local<br/>(Zustand)"]:::frontend
+        SW["Service Worker<br/>Offline"]:::frontend
+    end
+
+    subgraph Server ["Backend (FastAPI)"]
+        direction TB
+        API["API Gateway / Router"]:::backend
+        Auth["Autenticação JWT"]:::backend
+        Logic["Regras de Negócio<br/>(Movimentações & Manifestações)"]:::backend
+        IA["Integração IA<br/>(Futuro)"]:::external
+    end
+
+    subgraph Data ["Persistência & Storage"]
+        direction TB
+        DB[("PostgreSQL")]:::data
+        Redis[("Redis Cache")]:::data
+        Storage["File Storage<br/>Uploads"]:::data
+    end
+
+    %% Conexões
+    UI <-->|Leitura/Escrita| Store
+    UI -->|Interage| Chat
+    Chat -->|Ações| UI
+    UI -->|Request| SW
+
+    SW -->|Cache Hit| UI
+    SW ===>|Network / Fetch| API
+
+    API --> Auth
+    Auth --> Logic
+    Logic -.->|Sugestões| IA
+
+    Auth -.->|Sessão| Redis
+    Logic -->|CRUD| DB
+    Logic -->|Arquivos| Storage
+
+    %% Link de Estilos
+    linkStyle 4,5 stroke:#1565c0,stroke-width:2px
+```
 ---
 
 ## 3. Especificação do Frontend (Vue.js)
@@ -50,7 +100,103 @@ O frontend será uma Single Page Application (SPA) construída com Vue.js, trans
 
 A aplicação será modularizada em componentes reutilizáveis, seguindo as melhores práticas do Vue.js.
 
-![Diagrama de Componentes Frontend](docs/diagramas/componentes_frontend.png)
+```mermaid
+flowchart TD
+    %% Definição de Estilos
+    classDef core fill:#263238,stroke:#fff,stroke-width:2px,color:#fff
+    classDef layout fill:#e1bee7,stroke:#4a148c,stroke-width:2px,color:#4a148c
+    classDef page fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#0d47a1
+    classDef component fill:#fff3e0,stroke:#e65100,stroke-width:1px,color:#bf360c
+    classDef input fill:#fff,stroke:#333,stroke-dasharray: 5 5
+
+    %% Nível 1: Core da Aplicação
+    subgraph Root ["Core Application"]
+        App["App.tsx"]:::core
+        Theme["ThemeProvider"]:::core
+        App --> Theme
+    end
+
+    %% Nível 2: Layout Shell
+    subgraph Shell ["Global Layout Layer"]
+        Layout["Layout Wrapper"]:::layout
+        Header["Header / TopBar"]:::layout
+        BottomNav["Bottom Navigation<br/>(Mobile)"]:::layout
+        Chatbot["Chatbot Fab<br/>Assistente IZA"]:::layout
+        A11y["Acessibilidade Menu"]:::layout
+        
+        %% Conexões do Layout
+        Layout --> Header
+        Layout --> BottomNav
+        Layout --> Chatbot
+        Layout --> A11y
+    end
+
+    %% Nível 3: Router View
+    subgraph Router ["Main Content (Router View)"]
+        direction TB
+        MainContent["Outlet / Switch"]:::core
+        
+        %% Páginas
+        Home["Home Page"]:::page
+        NovaMan["Nova Manifestação"]:::page
+        MinhasMan["Minhas Manifestações"]:::page
+        Login["Login"]:::page
+    end
+
+    %% Nível 4: Componentes Específicos
+    subgraph Wizard ["Wizard Components"]
+        Step1["Step 1: Tipo"]:::component
+        Step2["Step 2: Conteúdo"]:::component
+        Step3["Step 3: Identificação"]:::component
+        
+        %% Inputs do Step 2
+        Audio["AudioRecorder"]:::input
+        Upload["MediaUploader"]:::input
+        Text["⌨TextInput"]:::input
+    end
+
+    subgraph Details ["Detail Components"]
+        List["Lista Cards"]:::component
+        Detail["Detalhe View"]:::component
+        Timeline["Timeline Histórico"]:::input
+        ChatInput["Chat Input"]:::input
+    end
+
+    %% Conexões Hierárquicas Principais
+    App --> Layout
+    Layout --> MainContent
+    
+    %% Rotas
+    MainContent --> Home
+    MainContent --> Login
+    MainContent --> NovaMan
+    MainContent --> MinhasMan
+
+    %% Detalhes da Home
+    Home --> Grid["Grid Ações Rápidas"]:::component
+    Home --> Info["Info Cards"]:::component
+
+    %% Detalhes Nova Manifestação
+    NovaMan --> Step1
+    NovaMan --> Step2
+    NovaMan --> Step3
+    
+    Step2 --- Audio
+    Step2 --- Upload
+    Step2 --- Text
+
+    %% Detalhes Minhas Manifestações
+    MinhasMan --> List
+    MinhasMan --> Detail
+    Detail --> Timeline
+    Detail --> ChatInput
+	
+	
+	style MainContent color:#000000,fill:#D9D9D9,stroke:#545454
+	style Theme stroke:#545454,fill:#D9D9D9,color:#000000
+	style App stroke:#545454,fill:#D9D9D9,color:#000000
+```
+
 
 ### 3.2. Estratégia de PWA e Offline-First
 
@@ -86,8 +232,58 @@ O backend será uma API RESTful construída com FastAPI, responsável pela lógi
 
 A API será organizada em rotas lógicas para gerenciar manifestações, protocolos e autenticação (se aplicável).
 
-![Diagrama de Endpoints da API](docs/diagramas/endpoints_api.png)
+```mermaid
+flowchart LR
+    %% --- Definição de Estilos (Padrão Swagger/OpenAPI) ---
+    classDef get fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#0d47a1
+    classDef post fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#1b5e20
+    classDef put fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#e65100
+    classDef client fill:#333,stroke:#000,stroke-width:2px,color:#fff
+    
+    %% Nó do Cliente
+    Client("App / Client"):::client
 
+    %% Grupo 1: Autenticação
+    subgraph Auth ["Autenticação"]
+        direction TB
+        POST_LOGIN["POST /auth/login"]:::post
+        POST_REGISTER["POST /auth/register"]:::post
+    end
+
+    %% Grupo 2: Manifestações
+    subgraph Man ["Manifestações"]
+        direction TB
+        GET_MAN["GET /manifestacoes"]:::get
+        POST_MAN["POST /manifestacoes"]:::post
+        GET_MAN_ID["GET /manifestacoes/:id"]:::get
+        PUT_MAN["PUT /manifestacoes/:id"]:::put
+    end
+
+    %% Grupo 3: Movimentações
+    subgraph Mov ["Movimentações"]
+        direction TB
+        GET_MOV["GET /movimentacoes<br/>/:manifestacao_id"]:::get
+        POST_MOV["POST /movimentacoes"]:::post
+    end
+
+    %% Grupo 4: Auxiliares
+    subgraph Aux ["Auxiliares"]
+        direction TB
+        GET_ASS["GET /assuntos"]:::get
+        GET_PROT["GET /protocolos/gerar"]:::get
+    end
+
+    %% --- Conexões ---
+    %% Usamos links invisíveis ou diretos para organizar
+    Client ===> Auth
+    Client ===> Man
+    Client ===> Mov
+    Client ===> Aux
+
+    %% Dica: LinkStyle deixa as setas mais suaves
+    linkStyle default stroke:#b0bec5,stroke-width:2px
+	style Client color:#000000,stroke:#737373,fill:#D9D9D9
+```
 ### 4.2. Processamento de Mídia
 
 - **Upload**: Arquivos de áudio, vídeo e imagem serão recebidos como `UploadFile` no FastAPI.
@@ -109,7 +305,72 @@ O banco de dados relacional (PostgreSQL) armazenará todas as informações de f
 
 O diagrama abaixo descreve as tabelas principais e seus relacionamentos.
 
-![Diagrama do Modelo de Dados](docs/diagramas/modelo_dados.png)
+```mermaid
+erDiagram
+    %% Relacionamentos
+    USUARIOS ||--o{ MANIFESTACOES : "abre/cria"
+    USUARIOS ||--o{ MOVIMENTACOES : "registra (autor)"
+    ASSUNTOS ||--o{ MANIFESTACOES : "categoriza"
+    MANIFESTACOES ||--|{ MOVIMENTACOES : "possui histórico"
+    MANIFESTACOES ||--o{ ANEXOS : "contém evidências"
+    MANIFESTACOES ||--|| PROTOCOLOS : "gera"
+
+    %% Definição das Tabelas
+    USUARIOS {
+        varchar(36) id PK
+        varchar(255) nome
+        varchar(255) email
+        varchar(11) cpf
+        boolean admin
+        boolean ativo
+        varchar(255) senha_hash
+        timestamp data_criacao
+    }
+
+    MANIFESTACOES {
+        varchar(36) id PK
+        varchar(50) protocolo
+        text relato
+        boolean anonimo
+        json dados_complementares
+        varchar status
+        varchar(36) usuario_id FK "Pode ser nulo (anônimo)"
+        varchar(36) assunto_id FK
+    }
+
+    MOVIMENTACOES {
+        varchar(36) id PK
+        text texto
+        boolean interno "Se true, visível só para admin"
+        varchar(36) manifestacao_id FK
+        varchar(36) autor_id FK
+        timestamp data_criacao
+    }
+
+    ASSUNTOS {
+        varchar(36) id PK
+        varchar(255) nome
+        text descricao
+        json campos_adicionais
+        boolean ativo
+    }
+
+    ANEXOS {
+        varchar(36) id PK
+        varchar(500) arquivo_url
+        varchar(50) tipo_arquivo
+        integer tamanho
+        varchar(36) manifestacao_id FK
+    }
+
+    PROTOCOLOS {
+        varchar(50) numero PK
+        integer sequencia_diaria
+        timestamp data_geracao
+        timestamp data_expiracao
+        varchar(36) manifestacao_id FK
+    }
+```
 
 ---
 
@@ -117,7 +378,79 @@ O diagrama abaixo descreve as tabelas principais e seus relacionamentos.
 
 O diagrama de sequência a seguir detalha o fluxo de uma manifestação, desde a criação pelo cidadão até o processamento no backend, incluindo o modo offline.
 
-![Diagrama de Fluxo de Dados](docs/diagramas/fluxo_dados.png)
+```mermaid
+sequenceDiagram
+    autonumber
+    %% Definição dos Participantes
+    actor Cid as Cidadão
+    participant PWA as Frontend<br/>(PWA/Vue.js)
+    participant Chat as  Chatbot IZA
+    participant API as Backend<br/>(FastAPI)
+    participant DB as  Dados & Storage<br/>(Postgres/S3)
+    actor Ouv as  Ouvidor
+
+    %% --- CENÁRIO 1: ABERTURA DE MANIFESTAÇÃO ---
+    rect rgb(230, 245, 255)
+        note right of Cid: <b>Fluxo 1:</b> Abertura da Manifestação
+        
+        Cid->>PWA: Acessa Aplicação
+        
+        alt Via Chatbot
+            Cid->>Chat: Interage com IZA
+            Chat-->>Cid: Auxilia e direciona
+            Chat->>PWA: Solicita abertura de Form
+        else Via Direta
+            Cid->>PWA: Clica "Nova Manifestação"
+        end
+
+        PWA->>Cid: Exibe Formulário
+        Cid->>PWA: Preenche e anexa mídia
+        
+        PWA->>API: POST /manifestacoes (JSON + Files)
+        activate API
+        
+        API->>API: Valida Auth / Token
+        
+        par Persistência
+            API->>DB: INSERT dados (PostgreSQL)
+            API->>DB: Upload arquivos (Storage)
+        end
+        
+        DB-->>API: Confirma ID/Protocolo
+        API-->>PWA: Retorna 201 Created (Protocolo)
+        deactivate API
+        
+        PWA-->>Cid: Exibe Sucesso e Protocolo
+    end
+
+    %% Separador visual
+    note over Cid, Ouv: ... Tempo de espera ...
+
+    %% --- CENÁRIO 2: TRATAMENTO PELO OUVIDOR ---
+    rect rgb(255, 245, 230)
+        note right of Cid: <b>Fluxo 2:</b> Tratamento Interno
+        
+        Ouv->>PWA: Acessa Painel Administrativo
+        PWA->>API: GET /manifestacoes (Filtros)
+        activate API
+        API->>DB: SELECT * FROM manifestacoes
+        DB-->>API: Retorna Lista
+        API-->>PWA: JSON (Lista)
+        deactivate API
+
+        Ouv->>PWA: Analisa e registra Resposta
+        PWA->>API: POST /movimentacoes
+        activate API
+        
+        API->>DB: INSERT movimentacao
+        API->>API: Dispara Notificação (Email Service)
+        
+        API-->>PWA: Retorna 200 OK
+        deactivate API
+        
+        PWA-->>Ouv: Confirmação visual
+    end
+```
 
 ---
 
@@ -128,4 +461,122 @@ O diagrama de sequência a seguir detalha o fluxo de uma manifestação, desde a
 - **CI/CD**: Configuração de um pipeline simples com GitHub Actions para automatizar os builds e deploys do frontend e backend a cada `push` na branch principal.
 
 ---
+
+# Guia de Configuração e Instalação - Participa DF OUV
+
+Este guia detalha o processo de configuração do ambiente de desenvolvimento para o projeto Participa DF, incluindo backend, banco de dados e frontend.
+
+## Pré-requisitos
+
+- **Docker** e **Docker Compose** (para banco de dados e cache)
+- **Python 3.9+** (para o backend)
+- **Node.js 18+** e **pnpm** (para o frontend)
+- **Git**
+
+---
+
+## 1. Configuração do Banco de Dados (Docker)
+
+O projeto utiliza PostgreSQL como banco de dados relacional e Redis para cache/sessões. A maneira mais fácil de iniciá-los é via Docker Compose.
+
+1. Navegue até a raiz do projeto:
+   ```bash
+   cd Desafio-Participa-DF-OUV
+   ```
+
+2. Inicie os containers:
+   ```bash
+   docker-compose up -d
+   ```
+
+Isso iniciará:
+- **PostgreSQL** na porta `5432`
+- **Redis** na porta `6379`
+
+### Estrutura do Banco de Dados
+
+O sistema criará automaticamente as tabelas ao iniciar o backend. As principais tabelas são:
+- `usuarios`: Dados dos cidadãos
+- `assuntos`: Categorias de manifestação
+- `manifestacoes`: Registros principais
+- `movimentacoes`: **Histórico de interações e chat** (Tabela crítica para o funcionamento do chat)
+- `anexos`: Arquivos de mídia
+- `protocolos`: Controle de numeração
+
+---
+
+## 2. Configuração do Backend (FastAPI)
+
+1. Acesse a pasta do backend:
+   ```bash
+   cd backend
+   ```
+
+2. Crie e ative um ambiente virtual:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # Linux/Mac
+   # ou
+   venv\Scripts\activate     # Windows
+   ```
+
+3. Instale as dependências:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. Configure as variáveis de ambiente:
+   - Copie o arquivo de exemplo: `cp .env.example .env`
+   - Edite o `.env` com as credenciais do banco (padrão do docker-compose):
+     ```ini
+     DATABASE_URL=postgresql://postgres:postgres@localhost:5432/participa_df
+     REDIS_URL=redis://localhost:6379
+     ```
+
+5. Execute as migrações e popule o banco (se necessário):
+   ```bash
+   # O sistema usa SQLAlchemy para criar tabelas automaticamente no startup
+   # Para popular assuntos iniciais:
+   python seed_assuntos.py
+   ```
+
+6. Inicie o servidor:
+   ```bash
+   uvicorn app.main:app --reload
+   ```
+
+O backend estará rodando em `http://localhost:8000`.
+Documentação da API (Swagger): `http://localhost:8000/docs`
+
+---
+
+## 3. Configuração do Frontend (Vue.js PWA)
+
+1. Acesse a pasta do frontend (se houver, ou siga as instruções do repositório frontend separado):
+   ```bash
+   cd frontend
+   ```
+
+2. Instale as dependências:
+   ```bash
+   pnpm install
+   ```
+
+3. Inicie o servidor de desenvolvimento:
+   ```bash
+   pnpm dev
+   ```
+
+O frontend estará acessível em `http://localhost:3000` (ou porta indicada).
+
+---
+
+## 4. Verificação da Instalação
+
+Para garantir que tudo está funcionando, especialmente o módulo de **Movimentações**:
+
+1. Acesse o Swagger UI: `http://localhost:8000/docs`
+2. Procure pela seção **Movimentacoes**.
+3. Teste o endpoint `GET /api/movimentacoes/{manifestacao_id}` (você precisará criar uma manifestação primeiro).
+4. Se retornar `200 OK` (mesmo que lista vazia), a tabela e a API de movimentações estão configuradas corretamente.
 
