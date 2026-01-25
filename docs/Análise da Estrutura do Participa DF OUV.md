@@ -5,7 +5,7 @@ Este documento detalha a estrutura técnica e funcional do projeto **Participa D
 
 ## Fluxo de Formulário (Frontend PWA)
 
-O frontend foi desenvolvido como um **Progressive Web App (PWA)** utilizando Vue.js, garantindo funcionamento offline e instalação em dispositivos móveis.
+O frontend foi desenvolvido como um **Progressive Web App (PWA)** utilizando React, garantindo funcionamento offline e instalação em dispositivos móveis.
 
 ### Etapas Sequenciais (Wizard):
 1.  **Tipo e Assunto**:

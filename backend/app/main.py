@@ -1,5 +1,5 @@
 """
- Desafio Participa-DF-OUV Backend - Entry Point
+ Desafio Participa-DF-Ouvidoria Backend - Entry Point
 FastAPI Application
 """
 
@@ -46,14 +46,14 @@ async def lifespan(app: FastAPI):
         os.makedirs("uploads")
         logger.info("Pasta 'uploads' criada com sucesso.")
 
-    logger.info("Iniciando Participa-DF-OUV Backend")
+    logger.info("Iniciando Participa-DF-Ouvidoria Backend")
     yield
-    logger.info("Encerrando Participa-DF-OUV Backend")
+    logger.info("Encerrando Participa-DF-Ouvidoria Backend")
 
 
 # Criar aplicação FastAPI
 app = FastAPI(
-    title="Desafio Participa-DF-OUV API",
+    title="Desafio Participa-DF-Ouvidoria API",
     description="API de Ouvidoria Acessível para o Participa DF",
     version="1.0.0",
     lifespan=lifespan,
@@ -62,7 +62,7 @@ app = FastAPI(
 # Configurar CORS (Permite que o Frontend acesse o Backend)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=["*"],
     allow_credentials=settings.CORS_ALLOW_CREDENTIALS,
     allow_methods=settings.CORS_ALLOW_METHODS,
     allow_headers=settings.CORS_ALLOW_HEADERS,
@@ -92,7 +92,7 @@ async def root():
     Rota raiz da API (apenas informativo)
     """
     return {
-        "message": "Bem-vindo ao Participa-DF-OUV API",
+        "message": "Bem-vindo ao Participa-DF-Ouvidoria API",
         "version": "1.0.0",
         "docs": "/docs",
         "health": "/api/health",

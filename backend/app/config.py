@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     # ==========================================================================
     # GERAL DA APLICAÇÃO
     # ==========================================================================
-    APP_NAME: str = "ParticipaDF-OUV"
+    APP_NAME: str = "ParticipaDF-Ouvidoria"
     APP_VERSION: str = "1.0.0"
     
     # Se True, mostra erros detalhados no navegador (perigoso em produção!)

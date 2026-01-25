@@ -1,6 +1,6 @@
 # Especificação Técnica: PWA de Ouvidoria Acessível
 
-#### **Projeto**: `Participa-DF-OUV`
+#### **Projeto**: `Participa-DF-Ouvidoria`
 #### **Autores**: 
 - Rafael da Silva Oliveira -
 <a href="https://www.linkedin.com/in/rafael-da-silva-oliveira-623634184/" target="blank">Linkedin<img src="https://raw.githubusercontent.com/rahuldkjain/github-profile-readme-generator/master/src/images/icons/Social/linked-in-alt.svg" alt="https://www.linkedin.com/in/rafael-da-silva-oliveira-623634184/" height="15" width="50" /></a>
@@ -29,7 +29,7 @@ Este documento detalha a especificação técnica para o desenvolvimento de uma 
 
 A arquitetura proposta desacopla o frontend do backend, garantindo escalabilidade, manutenibilidade e uma melhor experiência de desenvolvimento. A stack tecnológica foi escolhida para atender aos requisitos de performance, PWA e integração.
 
-- **Frontend**: Vue.js (com Vite, TypeScript, TailwindCSS)
+- **Frontend**: React (com Vite, TypeScript, TailwindCSS)
 - **Backend**: FastAPI (Python)
 - **Cache**: Redis
 - **Banco de Dados**: PostgreSQL
@@ -47,7 +47,7 @@ O diagrama abaixo ilustra a interação entre os principais componentes do siste
     classDef data fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#4a148c
     classDef external fill:#eeeeee,stroke:#9e9e9e,stroke-width:2px,stroke-dasharray: 5 5
 
-    subgraph Client ["Frontend PWA (Vue.js)"]
+    subgraph Client ["Frontend PWA (React)"]
         direction TB
         UI["Interface do Usuário"]:::frontend
         Chat["Chatbot Assistente IZA"]:::frontend
@@ -92,13 +92,13 @@ O diagrama abaixo ilustra a interação entre os principais componentes do siste
 ```
 ---
 
-## 3. Especificação do Frontend (Vue.js)
+## 3. Especificação do Frontend (React)
 
-O frontend será uma Single Page Application (SPA) construída com Vue.js, transformada em um PWA completo. O foco será em performance, acessibilidade e uma experiência de usuário fluida.
+O frontend será uma Single Page Application (SPA) construída com React, transformada em um PWA completo. O foco será em performance, acessibilidade e uma experiência de usuário fluida.
 
 ### 3.1. Estrutura de Componentes
 
-A aplicação será modularizada em componentes reutilizáveis, seguindo as melhores práticas do Vue.js.
+A aplicação será modularizada em componentes reutilizáveis, seguindo as melhores práticas do React.
 
 ```mermaid
 flowchart TD
@@ -383,7 +383,7 @@ sequenceDiagram
     autonumber
     %% Definição dos Participantes
     actor Cid as Cidadão
-    participant PWA as Frontend<br/>(PWA/Vue.js)
+    participant PWA as Frontend<br/>(PWA/React)
     participant Chat as  Chatbot IZA
     participant API as Backend<br/>(FastAPI)
     participant DB as  Dados & Storage<br/>(Postgres/S3)
@@ -456,7 +456,7 @@ sequenceDiagram
 
 ## 7. Estratégia de Deploy
 
-- **Frontend (Vue.js)**: Deploy contínuo em uma plataforma de hospedagem estática (Vercel ou Netlify) a partir do repositório Git.
+- **Frontend (React)**: Deploy contínuo em uma plataforma de hospedagem estática (Vercel ou Netlify) a partir do repositório Git.
 - **Backend (FastAPI)**: Containerização com Docker e deploy em uma plataforma como serviço (Heroku ou Google Cloud Run).
 - **CI/CD**: Configuração de um pipeline simples com GitHub Actions para automatizar os builds e deploys do frontend e backend a cada `push` na branch principal.
 
@@ -464,7 +464,7 @@ sequenceDiagram
 
 # Guia de Configuração e Instalação - Participa DF OUV
 
-Este guia detalha o processo de configuração do ambiente de desenvolvimento para o projeto Participa DF, incluindo backend, banco de dados e frontend.
+Este guia detalha o processo de configuração do ambiente de desenvolvimento para o projeto Participa DF OUV, incluindo backend, banco de dados e frontend.
 
 ## Pré-requisitos
 
@@ -481,12 +481,11 @@ O projeto utiliza PostgreSQL como banco de dados relacional e Redis para cache/s
 
 1. Navegue até a raiz do projeto:
    ```bash
-   cd Desafio-Participa-DF-OUV
+   cd Desafio-Participa-DF-Ouvidoria
    ```
-
-2. Inicie os containers:
+2. Instale as imagens, volumes e os containers (Com o ambiente docker aberto):
    ```bash
-   docker-compose up -d
+   docker-compose up --build
    ```
 
 Isso iniciará:
@@ -502,6 +501,8 @@ O sistema criará automaticamente as tabelas ao iniciar o backend. As principais
 - `movimentacoes`: **Histórico de interações e chat** (Tabela crítica para o funcionamento do chat)
 - `anexos`: Arquivos de mídia
 - `protocolos`: Controle de numeração
+
+>Use as credenciais contidas no arquivo docker-compose.yml para iniciar uma conexão no SGDB
 
 ---
 
@@ -529,7 +530,7 @@ O sistema criará automaticamente as tabelas ao iniciar o backend. As principais
    - Copie o arquivo de exemplo: `cp .env.example .env`
    - Edite o `.env` com as credenciais do banco (padrão do docker-compose):
      ```ini
-     DATABASE_URL=postgresql://postgres:postgres@localhost:5432/participa_df
+     DATABASE_URL=postgresql://participa_user:participa_password@localhost:5432/participadf_ouv_db
      REDIS_URL=redis://localhost:6379
      ```
 
@@ -550,7 +551,7 @@ Documentação da API (Swagger): `http://localhost:8000/docs`
 
 ---
 
-## 3. Configuração do Frontend (Vue.js PWA)
+## 3. Configuração do Frontend (React PWA)
 
 1. Acesse a pasta do frontend (se houver, ou siga as instruções do repositório frontend separado):
    ```bash
@@ -573,10 +574,10 @@ O frontend estará acessível em `http://localhost:3000` (ou porta indicada).
 
 ## 4. Verificação da Instalação
 
-Para garantir que tudo está funcionando, especialmente o módulo de **Movimentações**:
+Para garantir que tudo está funcionando, especialmente o módulo de **Assuntos**:
 
 1. Acesse o Swagger UI: `http://localhost:8000/docs`
-2. Procure pela seção **Movimentacoes**.
-3. Teste o endpoint `GET /api/movimentacoes/{manifestacao_id}` (você precisará criar uma manifestação primeiro).
-4. Se retornar `200 OK` (mesmo que lista vazia), a tabela e a API de movimentações estão configuradas corretamente.
+2. Procure pela seção **Assuntos**.
+3. Teste o endpoint `GET /api/assuntos/` (você precisará popular através do arquivo seed_assuntos.py ).
+4. Se retornar `200 OK` (mesmo que lista vazia), a tabela e a API de assuntos estão configuradas corretamente.
 

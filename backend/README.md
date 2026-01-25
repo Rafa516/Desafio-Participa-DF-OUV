@@ -1,4 +1,4 @@
-# Backend - Participa-DF-OUV API
+# Backend - Participa-DF-Ouvidoria API
 
 FastAPI backend para a aplicação PWA de Ouvidoria Acessível.
 
@@ -14,7 +14,7 @@ FastAPI backend para a aplicação PWA de Ouvidoria Acessível.
 
 1. **Clone o repositório**
 ```bash
-git clone https://github.com/Rafa516/Desafio-Participa-DF-OUV.git
+git clone https://github.com/Rafa516/Desafio-Participa-DF-Ouvidoria.git
 cd Desafio-Participa-DF/backend
 ```
 

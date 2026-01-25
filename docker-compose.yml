@@ -2,11 +2,10 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
-    container_name: participadf-ouv-postgres
+    container_name: participadf-Ouvidoria-postgres
     restart: always
     environment:
-      POSTGRES_USER: 
-      
+      POSTGRES_USER: participa_user  
       POSTGRES_PASSWORD: participa_password
       POSTGRES_DB: participadf_ouv_db
     ports:
@@ -14,7 +13,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U participa_user"]
+      test: ["CMD-SHELL", "pg_isready -U participa_user -d participadf_ouv_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -22,7 +21,7 @@ services:
   # Redis Cache
   redis:
     image: redis:7-alpine
-    container_name: participadf-ouv-redis
+    container_name: participadf-Ouvidoria-redis
     restart: always
     ports:
       - "6379:6379"
@@ -40,7 +39,7 @@ services:
       
       context: . 
       dockerfile: Dockerfile
-    container_name: participadf-ouv-backend
+    container_name: participadf-Ouvidoria-backend
     restart: always
     environment:
       DATABASE_URL: postgresql://participa_user:participa_password@postgres:5432/participadf_ouv_db

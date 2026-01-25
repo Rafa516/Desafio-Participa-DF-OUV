@@ -1,80 +1,27 @@
-# Frontend (Vue.js)
-frontend/node_modules/
-frontend/dist/
-frontend/.env.local
-frontend/.env.*.local
-frontend/*.log
-frontend/npm-debug.log*
-frontend/yarn-debug.log*
-frontend/yarn-error.log*
-frontend/.DS_Store
-frontend/coverage/
+# --- FRONTEND (React / Vite) ---
+node_modules/
+**/node_modules/
+frontend/client/dist/
+frontend/client/.vite/
+frontend/client/*.log
 
-# Backend (FastAPI)
-backend/__pycache__/
-backend/*.py[cod]
-backend/*$py.class
-backend/*.so
-backend/.Python
-backend/build/
-backend/develop-eggs/
-backend/dist/
-backend/downloads/
-backend/eggs/
-backend/.eggs/
-backend/lib/
-backend/lib64/
-backend/parts/
-backend/sdist/
-backend/var/
-backend/wheels/
-backend/pip-wheel-metadata/
-backend/share/python-wheels/
-backend/*.egg-info/
-backend/.installed.cfg
-backend/*.egg
-backend/MANIFEST
-backend/.env
-backend/.env.local
+# --- BACKEND (Python / FastAPI) ---
+**/__pycache__/
+**/*.py[cod]
 backend/venv/
-backend/ENV/
 backend/env/
-backend/.vscode/
-backend/.idea/
+.venv/
 backend/.pytest_cache/
-backend/.coverage
-backend/htmlcov/
 
-# IDE
+# --- AMBIENTE E PRIVACIDADE ---
+# Se quiser subir seus .env de teste para o Git, coloque um # na frente das linhas abaixo:
+.env
+backend/.env
+frontend/.env
+frontend/client/.env
+
+# --- IDE E SISTEMA ---
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
 .DS_Store
 Thumbs.db
-
-# Environment variables
-.env
-.env.local
-.env.*.local
-
-# OS
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-
-# Logs
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Temporary files
-tmp/
-temp/
-*.tmp
