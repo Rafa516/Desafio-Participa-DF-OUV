@@ -12,49 +12,54 @@ import Register from "./pages/Register";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import MinhasManifestacoes from "./pages/MinhasManifestacoes";
+import DetalhesManifestacao from "./pages/DetalhesManifestacao";
+// Importação do componente real
+import NovaManifestacao from "./pages/NovaManifestacao"; 
 
 function Router() {
   return (
     <Layout>
       <Switch>
-        {/* Rota Pública: Home */}
+        {/* Rota Pública */}
         <Route path="/" component={Home} />
 
         {/* Rotas de Autenticação */}
         <Route path="/login" component={Login} />
-        {/* Rota para a tela de cadastro */}
         <Route path="/cadastro" component={Register} />
-        {/* Rota para recuperação de senha */}
         <Route path="/esqueci-senha" component={ForgotPassword} />
-        {/* Rota para redefinição de senha */}
         <Route path="/redefinir-senha" component={ResetPassword} />
 
-        {/* --- ROTAS PROTEGIDAS (Requer autenticação) --- */}
+        {/* --- ROTAS PROTEGIDAS --- */}
 
-        {/* Minhas Manifestações */}
         <Route path="/manifestacoes">
           <ProtectedRoute>
-            <div className="p-4 text-center text-muted-foreground">Minhas Manifestações (Área Restrita)</div>
+            <MinhasManifestacoes />
           </ProtectedRoute>
         </Route>
 
-        {/* Nova Manifestação */}
+        <Route path="/manifestacao/:protocolo">
+        <ProtectedRoute>
+          <DetalhesManifestacao />
+        </ProtectedRoute>
+      </Route>
+
+       
         <Route path="/nova-manifestacao">
           <ProtectedRoute>
-            <div className="p-4 text-center text-muted-foreground">Nova Manifestação (Em breve)</div>
+            <NovaManifestacao />
           </ProtectedRoute>
         </Route>
 
-        {/* Perfil */}
+        
+
         <Route path="/perfil">
           <ProtectedRoute>
-            <div className="p-4 text-center text-muted-foreground">Meu Perfil (Área Restrita)</div>
+            <div className="p-4 text-center text-muted-foreground">Meu Perfil</div>
           </ProtectedRoute>
         </Route>
 
-        {/* --- FIM ROTAS PROTEGIDAS --- */}
-
-        <Route path="/chat-ajuda" component={() => <div className="p-4 text-center text-muted-foreground">Chat de Ajuda (Em breve)</div>} />
+        <Route path="/chat-ajuda" component={() => <div className="p-4 text-center text-muted-foreground">Chat de Ajuda</div>} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

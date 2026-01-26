@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { MessageSquare, X, Send, Bot } from "lucide-react";
+import { X, Send, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -17,7 +17,6 @@ interface Message {
 
 export default function ChatbotAssistente() {
   const [isOpen, setIsOpen] = useState(false);
-  // MUDANÇA 1: Nome Dora
   const [messages, setMessages] = useState<Message[]>([
     { id: 1, text: "Olá! Sou a Dora, sua assistente da ouvidoria.", sender: "bot" }
   ]);
@@ -29,11 +28,10 @@ export default function ChatbotAssistente() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
 
-useEffect(() => {
+  useEffect(() => {
     if (user?.nome) {
       setMessages(prev => {
         const newMessages = [...prev];
-        // Atualiza apenas a primeira mensagem (índice 0)
         newMessages[0] = { 
           ...newMessages[0],
           text: `Olá ${user.nome}! Sou a Dora, sua assistente da ouvidoria.` 
@@ -41,7 +39,7 @@ useEffect(() => {
         return newMessages;
       });
     }
-  }, [user]); // Só roda quando o usuário mudar
+  }, [user]);
 
   const fetchAssuntos = async (): Promise<{ text: string; options: string[] }> => {
     try {
@@ -68,9 +66,7 @@ useEffect(() => {
       const timer = setTimeout(async () => {
         setIsOpen(true);
         setIsLoading(true);
-        
         const responseData = await fetchAssuntos();
-        
         setMessages(prev => [
           ...prev, 
           { 
@@ -80,14 +76,19 @@ useEffect(() => {
             options: responseData.options 
           }
         ]);
-        
         setIsLoading(false);
         setHasAutoOpened(true);
       }, 5000);
-
       return () => clearTimeout(timer);
     }
   }, [hasAutoOpened]);
+
+  // Scroll automático para a última mensagem
+  useEffect(() => {
+    if (scrollRef.current) {
+        scrollRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [messages, isLoading, isOpen]);
 
   const handleBadgeClick = (option: string) => {
     setInputValue(`Gostaria de falar sobre ${option}`);
@@ -133,7 +134,7 @@ useEffect(() => {
     <>
       <Button
         className={cn(
-          "fixed bottom-20 right-4 z-40 rounded-full w-14 h-14 shadow-lg transition-all duration-300 bg-primary hover:bg-primary/90 text-white",
+          "fixed bottom-20 right-4 z-40 rounded-full w-14 h-14 shadow-lg transition-all duration-300 bg-primary hover:bg-primary/90 text-primary-foreground",
           isOpen ? "scale-0 opacity-0" : "scale-100 opacity-100"
         )}
         onClick={() => setIsOpen(true)}
@@ -149,7 +150,7 @@ useEffect(() => {
             : "scale-90 opacity-0 translate-y-10 h-0 pointer-events-none"
         )}
       >
-        {/* MUDANÇA 2: Nome Dora + Fix shrink-0 */}
+        {/* HEADER: bg-primary (Azul) */}
         <div className="bg-primary p-4 flex items-center justify-between text-primary-foreground shrink-0">
           <div className="flex items-center gap-2">
             <div className="bg-white/20 p-1.5 rounded-full">
@@ -170,14 +171,14 @@ useEffect(() => {
           </Button>
         </div>
 
-        {/* Fix min-h-0 */}
+        {/* ÁREA DE MENSAGENS: bg-muted/30 (Fundo levemente cinza/escuro) */}
         <ScrollArea className="flex-1 p-4 bg-muted/30 min-h-0">
-          <div className="space-y-6 pb-2" ref={scrollRef}>
+          <div className="space-y-6 pb-2">
             {messages.map((msg) => (
               <div
                 key={msg.id}
                 className={cn(
-                  "flex flex-col w-full",
+                  "flex flex-col w-full animate-in slide-in-from-bottom-2 fade-in",
                   msg.sender === "user" ? "items-end" : "items-start"
                 )}
               >
@@ -185,8 +186,8 @@ useEffect(() => {
                   className={cn(
                     "max-w-[85%] p-3 rounded-2xl text-sm shadow-sm font-lato mb-1",
                     msg.sender === "user"
-                      ? "bg-primary text-primary-foreground rounded-tr-none"
-                      : "bg-white text-foreground border border-border rounded-tl-none"
+                      ? "bg-primary text-primary-foreground rounded-tr-none" // Usuário: Azul
+                      : "bg-card text-card-foreground border border-border rounded-tl-none" // Bot: Cartão (Branco/Cinza Escuro)
                   )}
                 >
                   {msg.text}
@@ -198,7 +199,7 @@ useEffect(() => {
                       <button
                         key={idx}
                         onClick={() => handleBadgeClick(option)}
-                        className="text-xs bg-primary/10 text-primary hover:bg-primary hover:text-white border border-primary/20 transition-colors px-3 py-1.5 rounded-full font-medium"
+                        className="text-xs bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground border border-primary/20 transition-colors px-3 py-1.5 rounded-full font-medium"
                       >
                         {option}
                       </button>
@@ -207,28 +208,33 @@ useEffect(() => {
                 )}
               </div>
             ))}
+            
+            {/* Loading Indicator */}
             {isLoading && (
-              <div className="flex justify-start">
-                 <div className="bg-white p-3 rounded-2xl rounded-tl-none border border-border shadow-sm">
-                    <span className="animate-pulse text-xs text-muted-foreground">Digitando...</span>
+              <div className="flex justify-start animate-in fade-in">
+                 <div className="bg-card p-3 rounded-2xl rounded-tl-none border border-border shadow-sm flex gap-1 items-center">
+                    <span className="w-1.5 h-1.5 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                    <span className="w-1.5 h-1.5 bg-muted-foreground/40 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                    <span className="w-1.5 h-1.5 bg-muted-foreground/40 rounded-full animate-bounce"></span>
                  </div>
               </div>
             )}
+            <div ref={scrollRef} />
           </div>
         </ScrollArea>
 
-        {/* Fix shrink-0 */}
+        {/* INPUT: bg-card (Fundo do input) */}
         <div className="p-3 bg-card border-t border-border flex gap-2 shrink-0">
           <Input
             placeholder="Digite sua dúvida..."
-            className="neu-flat border-none focus-visible:ring-1 font-lato"
+            className="bg-background border-input text-foreground focus-visible:ring-1 font-lato"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
           />
           <Button 
             size="icon" 
-            className="bg-primary hover:bg-primary/90 text-white rounded-xl shrink-0"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl shrink-0"
             onClick={() => handleSend()}
           >
             <Send size={18} />

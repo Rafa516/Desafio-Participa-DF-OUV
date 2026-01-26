@@ -4,12 +4,13 @@ Arquivo: backend/app/routes/manifestacoes.py
 Responsabilidade: Lidar com HTTP, Upload de arquivos físicos e chamar o Service.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Form, File, UploadFile
-from sqlalchemy.orm import Session
-from typing import List
 import os
 import shutil
+import json
 from uuid import uuid4
+from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Form, File, UploadFile
+from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.services.manifestacao_service import ManifestacaoService 
@@ -19,6 +20,8 @@ from app.schemas.manifestacao import (
     ManifestacaoListResponse,
     ClassificacaoManifestacaoSchema
 )
+# BLOCO: Importação da dependência de usuário da sua pasta de rotas
+from app.routes.auth import get_current_user 
 
 # ==============================================================================
 # CONFIGURAÇÃO DO ROTEADOR
@@ -50,27 +53,37 @@ def criar_manifestacao(
     assunto_id: str = Form(..., description="ID do assunto"),
     classificacao: ClassificacaoManifestacaoSchema = Form(ClassificacaoManifestacaoSchema.RECLAMACAO),
     anonimo: bool = Form(False),
+    # NOVIDADE: Recebe o JSON das caixinhas como string
+    dados_complementares: str = Form("{}"),
     arquivos: List[UploadFile] = File(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    # NOVIDADE: Captura o usuário logado via Token
+    current_user = Depends(get_current_user)
 ):
     """
     Recebe os dados do formulário e arquivos, salva os arquivos no disco
     e delega a criação do registro no banco para o ManifestacaoService.
     """
     
-    # 1. Validar dados do formulário (Pydantic)
+    # 1. Processar o JSON das caixinhas dinâmicas
+    try:
+        dados_dict = json.loads(dados_complementares)
+    except Exception:
+        dados_dict = {}
+
+    # 2. Validar dados do formulário (Pydantic)
     try:
         manifestacao_validada = ManifestacaoCreate(
             relato=relato,
             assunto_id=assunto_id,
             classificacao=classificacao,
             anonimo=anonimo,
-            dados_complementares={} 
+            dados_complementares=dados_dict 
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    # 2. Processar Uploads Físicos (Salvar no Disco)
+    # 3. Processar Uploads Físicos (Salvar no Disco)
     arquivos_processados = []
     
     if arquivos:
@@ -88,18 +101,22 @@ def criar_manifestacao(
                 tamanho_bytes = os.path.getsize(caminho_completo)
                 
                 arquivos_processados.append({
-                    "caminho": caminho_completo, # Caminho relativo ou absoluto
+                    "caminho": caminho_completo,
                     "tipo": arquivo.content_type,
                     "tamanho": tamanho_bytes
                 })
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Erro ao fazer upload de arquivos: {str(e)}")
 
-    # 3. Chamar o Service para Regra de Negócio (Banco de Dados)
+    # 4. Chamar o Service para Regra de Negócio (Banco de Dados)
     try:
+        # Define o usuario_id para vínculo no banco (None se for anônimo)
+        usuario_id = str(current_user.id) if not anonimo else None
+
         nova_manifestacao = ManifestacaoService.criar_manifestacao(
             db=db,
             manifestacao_data=manifestacao_validada,
+            usuario_id=usuario_id,
             arquivos_metadata=arquivos_processados
         )
         return nova_manifestacao

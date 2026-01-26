@@ -3,7 +3,7 @@ Manifestacao Business Logic Service
 Arquivo: backend/app/services/manifestacao_service.py
 """
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload # IMPORTANTE: Importar joinedload
 from sqlalchemy import desc, func, cast, Date
 from uuid import uuid4
 from datetime import datetime, timedelta
@@ -23,15 +23,19 @@ class ManifestacaoService:
     Centraliza a criação de Manifestação + Protocolo + Anexos.
     """
 
+    # ==========================================
+    # BLOCO 1: CRIAR MANIFESTAÇÃO (POST)
+    # ==========================================
     @staticmethod
     def criar_manifestacao(
         db: Session, 
         manifestacao_data: ManifestacaoCreate,
+        usuario_id: Optional[str] = None, 
         arquivos_metadata: List[Dict] = []
     ) -> Manifestacao:
         """
         Cria:
-        1. Manifestação
+        1. Manifestação (vinculada ao usuario_id se fornecido)
         2. Registro na tabela Protocolos (Auditoria)
         3. Registros na tabela Anexos (se houver)
         """
@@ -47,21 +51,22 @@ class ManifestacaoService:
         # Prazo (30 dias)
         data_limite = data_hoje + timedelta(days=30)
 
-        # 2. Calcular Sequência Diária (Lógica da Opção B)
+        # 2. Calcular Sequência Diária
         ultima_sequencia = db.query(func.max(Protocolo.sequencia_diaria))\
             .filter(cast(Protocolo.data_geracao, Date) == data_hoje.date())\
             .scalar()
         nova_sequencia = (ultima_sequencia or 0) + 1
 
-        # 3. Criar Objeto Manifestação (Campos Corretos)
+        # 3. Criar Objeto Manifestação
         nova_manifestacao = Manifestacao(
             id=manifestacao_id,
             protocolo=protocolo_texto,
-            relato=manifestacao_data.relato,            # Campo correto
-            assunto_id=manifestacao_data.assunto_id,    # Campo correto
+            relato=manifestacao_data.relato,
+            assunto_id=manifestacao_data.assunto_id,
             classificacao=manifestacao_data.classificacao,
             dados_complementares=manifestacao_data.dados_complementares,
             anonimo=manifestacao_data.anonimo,
+            usuario_id=usuario_id, 
             status="pendente",
             data_criacao=data_hoje
         )
@@ -78,10 +83,9 @@ class ManifestacaoService:
         try:
             db.add(nova_manifestacao)
             db.add(novo_protocolo)
-            db.flush() # Garante IDs antes de salvar anexos
+            db.flush() 
 
             # 5. Salvar metadados dos Anexos no Banco
-            # (O upload físico deve ser feito na Rota antes de chamar o service)
             for arq in arquivos_metadata:
                 novo_anexo = Anexo(
                     id=str(uuid4()),
@@ -93,7 +97,14 @@ class ManifestacaoService:
                 db.add(novo_anexo)
 
             db.commit()
+            
+            # Recarrega o objeto com os relacionamentos (Assunto e Anexos)
+            # Isso garante que a resposta da API já venha completa
             db.refresh(nova_manifestacao)
+            
+            # Força o carregamento do assunto para garantir que vá no response
+            # (opcional aqui se usar joinedload na consulta, mas bom pra garantir no create)
+            _ = nova_manifestacao.assunto 
             
             logger.info(f"Manifestação criada com sucesso: {protocolo_texto}")
             return nova_manifestacao
@@ -103,10 +114,21 @@ class ManifestacaoService:
             logger.error(f"Erro ao criar manifestação: {str(e)}")
             raise e
 
+    # ==========================================
+    # BLOCO 2: CONSULTA POR PROTOCOLO (GET)
+    # ==========================================
     @staticmethod
     def obter_manifestacao(db: Session, protocolo: str) -> Optional[Manifestacao]:
-        return db.query(Manifestacao).filter(Manifestacao.protocolo == protocolo).first()
+        # ADICIONADO: options(joinedload(...)) para trazer o Assunto e Anexos junto
+        return db.query(Manifestacao)\
+            .options(joinedload(Manifestacao.assunto))\
+            .options(joinedload(Manifestacao.anexos))\
+            .filter(Manifestacao.protocolo == protocolo)\
+            .first()
 
+    # ==========================================
+    # BLOCO 3: LISTAGEM PAGINADA (GET)
+    # ==========================================
     @staticmethod
     def listar_manifestacoes(
         db: Session,
@@ -114,8 +136,18 @@ class ManifestacaoService:
         limit: int = 10
     ) -> tuple[List[Manifestacao], int]:
         
+        # Query base com ordenação
         query = db.query(Manifestacao).order_by(desc(Manifestacao.data_criacao))
+        
+        # Contagem total antes do limit/offset
         total = query.count()
-        lista = query.offset(skip).limit(limit).all()
+        
+        # ADICIONADO: joinedload para trazer o nome do assunto em cada item da lista
+        # Isso evita o problema "N+1 queries" e preenche o card no frontend
+        lista = query.options(joinedload(Manifestacao.assunto))\
+                     .options(joinedload(Manifestacao.anexos))\
+                     .offset(skip)\
+                     .limit(limit)\
+                     .all()
         
         return lista, total

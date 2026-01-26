@@ -97,9 +97,12 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     db.add(usuario)
     db.commit()
     
+    # BLOCO ATUALIZADO: Incluindo email e cpf no payload para o frontend ler da sessão
     token_acesso = AuthService.criar_token_acesso(data={
         "sub": usuario.email,
         "nome": usuario.nome,
+        "email": usuario.email, # Adicionado para a Identificação
+        "cpf": usuario.cpf,     # Adicionado para a Identificação
         "id": str(usuario.id),
         "admin": usuario.admin
     })

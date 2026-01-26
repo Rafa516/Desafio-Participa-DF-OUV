@@ -77,6 +77,13 @@ class AnexoResponse(BaseModel):
     class Config:
         from_attributes = True
 
+# Schema simples para exibir o Assunto dentro da Manifestação
+class AssuntoSimplesResponse(BaseModel):
+    id: str
+    nome: str
+    
+    class Config:
+        from_attributes = True
 
 class ManifestacaoResponse(BaseModel):
     """
@@ -86,10 +93,14 @@ class ManifestacaoResponse(BaseModel):
     protocolo: str
     relato: str
     assunto_id: str
+    
+    # Objeto Assunto completo (aninhado) para exibir o nome no Front
+    assunto: Optional[AssuntoSimplesResponse] = None 
+
     classificacao: ClassificacaoManifestacaoSchema
     dados_complementares: Optional[Dict[str, Any]]
     anonimo: bool
-    status: str # Usando str aqui para evitar conflito se o banco retornar algo levemente diferente
+    status: str 
     data_criacao: datetime
     data_atualizacao: Optional[datetime]
     
