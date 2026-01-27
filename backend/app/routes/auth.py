@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import traceback
 import logging
 from typing import Optional, Any
@@ -10,16 +10,19 @@ from sqlalchemy.orm import Session
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 
-# --- IMPORTS DO SEU PROJETO ---
+
 from app.database import get_db
 from app.config import settings
 from app.services.auth_service import AuthService
-from app.schemas.usuario import UsuarioCreate, UsuarioResponse, Token, UsuarioLogin
+from app.schemas.usuario import UsuarioCreate, UsuarioResponse, Token, UsuarioLogin, UsuarioUpdate
 from app.models.usuario import Usuario 
 
 # --- CONFIGURAÇÕES GERAIS ---
 logger = logging.getLogger("uvicorn")
 pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
+
+# Configuração do Fuso Horário de Brasília (GMT-3)
+FUSO_BRASIL = timezone(timedelta(hours=-3))
 
 router = APIRouter(
     prefix="/api/auth",
@@ -29,7 +32,7 @@ router = APIRouter(
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 # ==============================================================================
-# DEPENDÊNCIA: OBTER USUÁRIO ATUAL (Essencial para não dar ImportError)
+# DEPENDÊNCIA: OBTER USUÁRIO ATUAL
 # ==============================================================================
 def get_current_user(
     token: str = Depends(oauth2_scheme), 
@@ -80,34 +83,60 @@ def registrar_usuario(
     return AuthService.criar_usuario(db=db, usuario_data=usuario_data)
 
 # ==============================================================================
-# ROTA: LOGIN (Já usa campos individuais por padrão do OAuth2)
+# ROTA: LOGIN (Com Fuso Horário Corrigido)
 # ==============================================================================
 @router.post("/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     cpf_limpo = form_data.username.replace(".", "").replace("-", "")
     
+    # Lógica original: Busca por CPF
     usuario_db = db.query(Usuario).filter(Usuario.cpf == cpf_limpo).first()
     if not usuario_db:
         raise HTTPException(status_code=400, detail="CPF ou senha incorretos")
 
-    dados_login = UsuarioLogin(email=usuario_db.email, senha=form_data.password)
-    usuario = AuthService.autenticar_usuario(db, dados_login)
-    
-    usuario.ultimo_acesso = datetime.now()
-    db.add(usuario)
+    # Verifica senha
+    if not AuthService.verificar_senha(form_data.password, usuario_db.senha_hash):
+        raise HTTPException(status_code=400, detail="CPF ou senha incorretos")
+
+    agora = datetime.now(FUSO_BRASIL)
+    usuario_db.ultimo_acesso = agora
+    db.add(usuario_db)
     db.commit()
     
-    # BLOCO ATUALIZADO: Incluindo email e cpf no payload para o frontend ler da sessão
+    # Payload com dados extras para o Frontend
     token_acesso = AuthService.criar_token_acesso(data={
-        "sub": usuario.email,
-        "nome": usuario.nome,
-        "email": usuario.email, # Adicionado para a Identificação
-        "cpf": usuario.cpf,     # Adicionado para a Identificação
-        "id": str(usuario.id),
-        "admin": usuario.admin
+        "sub": usuario_db.email,
+        "nome": usuario_db.nome,
+        "email": usuario_db.email, 
+        "telefone": usuario_db.telefone, 
+        "cpf": usuario_db.cpf,     
+        "id": str(usuario_db.id),
+        "admin": usuario_db.admin,
+        "ultimo_acesso": agora.isoformat() 
     })
     
     return {"access_token": token_acesso, "token_type": "bearer"}
+
+# ==============================================================================
+# ROTA: ATUALIZAR PERFIL
+# ==============================================================================
+@router.put("/atualizar-perfil", response_model=UsuarioResponse)
+def atualizar_meu_perfil(
+    dados: UsuarioUpdate,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Atualiza dados do usuário logado (apenas telefone por enquanto).
+    """
+    if dados.telefone is not None:
+        current_user.telefone = dados.telefone
+    
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+    
+    return current_user
 
 # ==============================================================================
 # ROTA: ESQUECI MINHA SENHA 
@@ -160,7 +189,6 @@ def redefinir_senha(
         if not usuario:
             raise HTTPException(status_code=404, detail="Usuário não encontrado")
 
-        # Validação de complexidade (reutilizando a lógica do Service)
         AuthService.validar_senha(nova_senha)
 
         usuario.senha_hash = pwd_context.hash(nova_senha)

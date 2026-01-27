@@ -1,4 +1,3 @@
-// ... imports mantidos iguais ...
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -11,11 +10,14 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { manifestacaoService } from "@/services/manifestacaoService";
 import { useAuth } from "@/contexts/AuthContext"; 
-import { FileImage, FileVideo, FileAudio, FileText, File as FileGeneric, UploadCloud, XCircle, AlertTriangle, VenetianMask } from "lucide-react";
+import { FileImage, FileVideo, FileAudio, FileText, File as FileGeneric, UploadCloud, XCircle, AlertTriangle, VenetianMask, Save } from "lucide-react";
+// Importação do Chatbot para o modo guia
+import ChatbotAssistente from "@/components/ChatbotAssistente";
+import { useChat } from "@/contexts/ChatContext"; // Necessário para a integração da Dora
 
-// ... constantes e helpers mantidos ...
 const MAX_SIZE_MB = 100;
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+const STORAGE_KEY = "manifestacao_draft_v2"; // Chave para o localStorage
 
 function formatBytes(bytes: number, decimals = 2) {
   if (bytes === 0) return '0 Bytes';
@@ -44,17 +46,25 @@ const tiposManifestacao = [
 ];
 
 export default function NovaManifestacao() {
-  // ... hooks e states mantidos iguais ...
   const [location, setLocation] = useLocation();
   const { user } = useAuth(); 
+  
+  // Integração Dora
+  const { setMode, setCurrentField } = useChat();
+
   const searchParams = new URLSearchParams(window.location.search);
 
+  // Estados do Formulário
   const [step, setStep] = useState(1);
   const [assuntos, setAssuntos] = useState<any[]>([]); 
   const [selectedAssunto, setSelectedAssunto] = useState<any>(null); 
   const [dynamicData, setDynamicData] = useState<Record<string, any>>({}); 
   const [isLoading, setIsLoading] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
+  
+  // --- Estado para controlar qual campo está em foco para a Dora ---
+  const [activeField, setActiveField] = useState<string | null>(null);
+
   const totalSize = files.reduce((acc, file) => acc + file.size, 0);
   const progressPercentage = Math.min((totalSize / MAX_SIZE_BYTES) * 100, 100);
 
@@ -69,7 +79,7 @@ export default function NovaManifestacao() {
     ? tiposManifestacao.filter(t => ['reclamacao', 'denuncia'].includes(t.valor))
     : tiposManifestacao;
 
-  // ... useEffects e handlers mantidos iguais ...
+  // --- Efeitos ---
   useEffect(() => {
     if (formData.anonimo) {
       const tipoValido = ['reclamacao', 'denuncia'].includes(formData.classificacao);
@@ -80,30 +90,95 @@ export default function NovaManifestacao() {
     }
   }, [formData.anonimo]);
 
+  // --- EFEITO DORA: MODO GUIA ---
   useEffect(() => {
-    manifestacaoService.listarAssuntos()
-      .then((res: any) => {
-        const lista = Array.isArray(res) ? res : (res?.assuntos || []);
-        setAssuntos(lista);
-        if (formData.assunto) {
-          const found = lista.find((a: any) => String(a.id) === formData.assunto);
-          if (found) setSelectedAssunto(found);
+    setMode("guide");
+    return () => {
+        setMode("global");
+        setCurrentField(null);
+    };
+  }, [setMode, setCurrentField]);
+
+  // --- EFEITO 1: Carregar Assuntos + Restaurar Rascunho (PERSISTÊNCIA) ---
+  useEffect(() => {
+    const init = async () => {
+        try {
+            const res: any = await manifestacaoService.listarAssuntos();
+            const lista = Array.isArray(res) ? res : (res?.assuntos || []);
+            setAssuntos(lista);
+
+            // Tenta recuperar rascunho
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                // Verifica se tem dados relevantes antes de restaurar
+                if (parsed.formData.descricao || parsed.step > 1 || parsed.formData.assunto) {
+                    setFormData(parsed.formData);
+                    setStep(parsed.step || 1);
+                    
+                    if (parsed.formData.assunto) {
+                        const found = lista.find((a: any) => String(a.id) === String(parsed.formData.assunto));
+                        if (found) {
+                            setSelectedAssunto(found);
+                            // Restaura dinâmicos apenas se o assunto bater
+                            if (parsed.dynamicData) setDynamicData(parsed.dynamicData);
+                        }
+                    }
+                    toast.info("Rascunho recuperado. Continue de onde parou.");
+                }
+            } else if (formData.assunto) {
+                const found = lista.find((a: any) => String(a.id) === formData.assunto);
+                if (found) setSelectedAssunto(found);
+            }
+        } catch {
+            toast.error("Erro ao carregar dados iniciais.");
         }
-      })
-      .catch(() => toast.error("Erro ao carregar assuntos."));
+    };
+    init();
   }, []);
 
+  // --- EFEITO 2: Salvar Rascunho Automaticamente (PERSISTÊNCIA) ---
+  useEffect(() => {
+    // Só salva se houver alguma alteração relevante
+    if (formData.descricao || formData.assunto || step > 1) {
+        const draft = { formData, dynamicData, step };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
+    }
+  }, [formData, dynamicData, step]);
+
+  // --- EFEITO 3: Proteção ao fechar aba (Browser) ---
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+        if (step > 1 || formData.descricao.length > 5) {
+            e.preventDefault();
+            e.returnValue = ''; 
+        }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [step, formData]);
+
+  // --- Função auxiliar para a Dora saber onde estamos ---
+  const handleFocus = (fieldName: string) => {
+    setActiveField(fieldName);
+    setCurrentField(fieldName);
+  };
+
+  // --- Handlers ---
   const handleAssuntoChange = (id: string) => {
     const found = assuntos.find(a => String(a.id) === id);
     setSelectedAssunto(found);
     setFormData({ ...formData, assunto: id });
     setDynamicData({}); 
+    handleFocus("assunto"); 
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleFocus("arquivos"); 
     if (e.target.files) {
       const newFiles = Array.from(e.target.files);
       const newFilesSize = newFiles.reduce((acc, file) => acc + file.size, 0);
+      
       if (totalSize + newFilesSize > MAX_SIZE_BYTES) {
         toast.error(`Limite de ${MAX_SIZE_MB}MB excedido.`);
         e.target.value = "";
@@ -118,7 +193,6 @@ export default function NovaManifestacao() {
   };
 
   const handleNext = () => {
-    // ... validações mantidas ...
     if (step === 1) {
       if (!formData.classificacao) return toast.error("Selecione o tipo de manifestação.");
       if (!formData.assunto) return toast.error("Selecione um assunto.");
@@ -141,30 +215,42 @@ export default function NovaManifestacao() {
     setStep(step + 1);
   };
 
+  // --- Handler de Saída com Confirmação ---
+  const handleExit = () => {
+      if (step > 1 || formData.descricao.length > 0 || formData.assunto) {
+          if (window.confirm("Você tem um rascunho em andamento. Deseja realmente sair? (Seus dados de texto ficarão salvos, mas arquivos anexados serão perdidos).")) {
+              setLocation("/");
+          }
+      } else {
+          setLocation("/");
+      }
+  };
+
   const handleBack = () => {
     if (step > 1) setStep(step - 1);
-    else setLocation("/");
+    else handleExit();
   };
 
   const handleSubmit = async () => {
-    // ... submit mantido ...
     setIsLoading(true);
+    // MONTAGEM MANUAL DO FORMDATA (Conforme seu arquivo original)
     const data = new FormData();
     data.append("classificacao", formData.classificacao);
     data.append("relato", formData.descricao);
     data.append("assunto_id", formData.assunto);
-    data.append("anonimo", String(formData.anonimo));
+    data.append("anonimo", String(formData.anonimo)); // Garante string
     data.append("dados_complementares", JSON.stringify(dynamicData));
     files.forEach((file) => data.append("arquivos", file));
 
     try {
       const result = await manifestacaoService.criarManifestacao(data);
+      localStorage.removeItem(STORAGE_KEY); 
       if (formData.anonimo) toast.success("Manifestação anônima recebida! Não será possível acompanhá-la.");
       else toast.success(`Protocolo gerado: ${result.protocolo}`);
-      setLocation("/manifestacoes");
+      setLocation("/manifestacoes"); 
     } catch (error: any) {
       console.error(error);
-      if (error.response?.status === 422) toast.error("Dados inválidos.");
+      if (error.response?.status === 422) toast.error("Dados inválidos. Verifique o preenchimento.");
       else if (error.response?.status === 401) toast.error("Sessão expirada. Faça login novamente.");
       else toast.error("Erro ao enviar manifestação.");
     } finally {
@@ -172,9 +258,13 @@ export default function NovaManifestacao() {
     }
   };
 
-  // --- RENDERIZAÇÃO COM CORES SEMÂNTICAS PARA DARK MODE ---
   return (
-    <div className="w-full h-full flex flex-col animate-in slide-in-from-bottom-4 duration-500">
+    <div className="w-full h-full flex flex-col animate-in slide-in-from-bottom-4 duration-500 relative">
+      
+      {/* INTEGRAÇÃO DA DORA */}
+      <ChatbotAssistente mode="guide" currentField={activeField} />
+
+      {/* Wizard (Landing Bar mantida) */}
       <div className="flex items-center justify-center mb-8 px-4 relative">
         <div className="flex gap-3">
           {[1, 2, 3, 4, 5].map((s) => (
@@ -188,10 +278,17 @@ export default function NovaManifestacao() {
         </div>
       </div>
 
-      {/* Container Principal: bg-card em vez de bg-white */}
       <div className="flex-1 bg-card rounded-3xl shadow-sm border border-border p-8 md:p-12 min-h-[600px] flex flex-col">
         <div className="max-w-4xl mx-auto w-full flex-1 flex flex-col">
           
+          {/* Indicador visual discreto de rascunho salvo */}
+          <div className="flex justify-end mb-2">
+            <span className="text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1 opacity-60">
+                <Save className="w-3 h-3" /> Rascunho automático ativo
+            </span>
+          </div>
+
+          {/* Passo 1 */}
           {step === 1 && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 flex-1">
               <div className="text-center space-y-3 mb-6">
@@ -199,15 +296,13 @@ export default function NovaManifestacao() {
                 <p className="text-lg text-muted-foreground">Escolha o tipo e o assunto da sua manifestação.</p>
               </div>
 
-              {/* Box Anônimo com cores semânticas */}
-              <div className={`grid gap-8 w-full transition-all duration-500 ${
-                formData.anonimo 
-                  ? "bg-muted/30 p-8 rounded-3xl border-2 border-border shadow-inner" 
-                  : "bg-card"
-              }`}>
-                <div className={`flex items-center justify-between p-6 rounded-2xl w-full border transition-all duration-300 ${
-                  formData.anonimo ? "bg-card border-border shadow-sm" : "bg-muted/30 border-border"
-                }`}>
+              <div className={`grid gap-8 w-full transition-all duration-500 ${formData.anonimo ? "bg-muted/30 p-8 rounded-3xl border-2 border-border shadow-inner" : "bg-card"}`}>
+                
+                {/* Switch Anonimato */}
+                <div 
+                    className={`flex items-center justify-between p-6 rounded-2xl w-full border transition-all duration-300 ${formData.anonimo ? "bg-card border-border shadow-sm" : "bg-muted/30 border-border"}`}
+                    onClick={() => handleFocus("anonimo")}
+                >
                   <div className="space-y-1">
                     <Label className="text-lg font-semibold text-foreground flex items-center gap-2">
                       {formData.anonimo && <VenetianMask className="w-5 h-5 text-muted-foreground" />}
@@ -217,7 +312,10 @@ export default function NovaManifestacao() {
                   </div>
                   <Switch 
                     checked={formData.anonimo}
-                    onCheckedChange={c => setFormData({...formData, anonimo: c})}
+                    onCheckedChange={c => {
+                        setFormData({...formData, anonimo: c});
+                        handleFocus("anonimo");
+                    }}
                     className="data-[state=checked]:bg-primary scale-125 mr-2"
                   />
                 </div>
@@ -236,9 +334,17 @@ export default function NovaManifestacao() {
                   </div>
                 )}
 
-                <div className="space-y-3 w-full">
+                {/* Tipo de Manifestação */}
+                <div className="space-y-3 w-full" onClick={() => handleFocus("classificacao")}>
                   <Label className="text-base font-semibold text-foreground">Tipo de Manifestação</Label>
-                  <Select value={formData.classificacao} onValueChange={(val) => setFormData({...formData, classificacao: val})}>
+                  <Select 
+                    value={formData.classificacao} 
+                    onValueChange={(val) => {
+                        setFormData({...formData, classificacao: val});
+                        handleFocus("classificacao");
+                    }}
+                    onOpenChange={(open) => open && handleFocus("classificacao")}
+                  >
                     <SelectTrigger className="!w-full !h-14 !px-4 !py-2 !text-lg !bg-background !border-border !rounded-xl">
                       <SelectValue placeholder="Selecione..." />
                     </SelectTrigger>
@@ -250,9 +356,14 @@ export default function NovaManifestacao() {
                   </Select>
                 </div>
 
-                <div className="space-y-3 w-full">
+                {/* Assunto */}
+                <div className="space-y-3 w-full" onClick={() => handleFocus("assunto")}>
                   <Label className="text-base font-semibold text-foreground">Assunto</Label>
-                  <Select value={formData.assunto} onValueChange={handleAssuntoChange}>
+                  <Select 
+                    value={formData.assunto} 
+                    onValueChange={handleAssuntoChange}
+                    onOpenChange={(open) => open && handleFocus("assunto")}
+                  >
                     <SelectTrigger className="!w-full !h-14 !px-4 !py-2 !text-lg !bg-background !border-border !rounded-xl">
                       <SelectValue placeholder="Selecione..." />
                     </SelectTrigger>
@@ -265,6 +376,7 @@ export default function NovaManifestacao() {
             </div>
           )}
 
+          {/* Passo 2: Descrição */}
           {step === 2 && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 flex-1">
               <div className="text-center space-y-3 mb-10">
@@ -278,6 +390,7 @@ export default function NovaManifestacao() {
                   className="min-h-[250px] p-6 text-lg bg-background border-border text-foreground rounded-2xl"
                   value={formData.descricao}
                   onChange={e => setFormData({...formData, descricao: e.target.value})}
+                  onFocus={() => handleFocus("descricao")} // Avisa a Dora
                 />
                 <div className={`text-right text-sm mt-2 ${formData.descricao.length < 10 ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
                   {formData.descricao.length} caracteres
@@ -286,6 +399,7 @@ export default function NovaManifestacao() {
             </div>
           )}
 
+          {/* Passo 3: Dados Complementares */}
           {step === 3 && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 flex-1">
               <div className="text-center space-y-3 mb-10">
@@ -296,15 +410,23 @@ export default function NovaManifestacao() {
                 {selectedAssunto?.campos_adicionais ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {Object.entries(selectedAssunto.campos_adicionais).map(([key, config]: [string, any]) => (
-                      <div key={key} className="space-y-3">
+                      <div key={key} className="space-y-3" onClick={() => handleFocus(`dinamico_${key}`)}>
                         <Label className="text-base font-semibold text-foreground">{config.label} {config.obrigatorio && "*"}</Label>
                         {config.tipo === "select" ? (
-                          <Select onValueChange={(val) => setDynamicData({ ...dynamicData, [key]: val })}>
+                          <Select 
+                            onValueChange={(val) => setDynamicData({ ...dynamicData, [key]: val })}
+                            onOpenChange={(open) => open && handleFocus(`dinamico_${key}`)}
+                          >
                             <SelectTrigger className="!w-full !h-14 !px-4 !py-2 !text-lg !bg-background !border-border !rounded-xl"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                             <SelectContent>{config.opcoes?.map((opt: string) => (<SelectItem key={opt} value={opt}>{opt}</SelectItem>))}</SelectContent>
                           </Select>
                         ) : (
-                          <Input className="h-14 px-4 py-2 text-lg bg-background border-border text-foreground rounded-xl" type={config.tipo === "date" ? "date" : "text"} onChange={e => setDynamicData({...dynamicData, [key]: e.target.value})} />
+                          <Input 
+                            className="h-14 px-4 py-2 text-lg bg-background border-border text-foreground rounded-xl" 
+                            type={config.tipo === "date" ? "date" : "text"} 
+                            onChange={e => setDynamicData({...dynamicData, [key]: e.target.value})}
+                            onFocus={() => handleFocus(`dinamico_${key}`)}
+                          />
                         )}
                       </div>
                     ))}
@@ -318,13 +440,14 @@ export default function NovaManifestacao() {
             </div>
           )}
 
+          {/* Passo 4: Upload */}
           {step === 4 && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 flex-1">
               <div className="text-center space-y-3 mb-6">
                 <h2 className="text-3xl font-bold text-foreground">Anexar Arquivos</h2>
                 <p className="text-lg text-muted-foreground">Envie comprovantes. Opcional.</p>
               </div>
-              <div className="w-full space-y-6">
+              <div className="w-full space-y-6" onClick={() => handleFocus("anexos")}>
                 <div className="border-2 border-dashed border-border bg-muted/20 rounded-2xl p-8 text-center hover:bg-muted/40 transition-colors group cursor-pointer">
                   <input type="file" id="file-upload" multiple className="hidden" onChange={handleFileChange} accept="image/*,video/*,audio/*,application/pdf" />
                   <label htmlFor="file-upload" className="cursor-pointer w-full h-full block">
@@ -335,7 +458,15 @@ export default function NovaManifestacao() {
                     </div>
                   </label>
                 </div>
-                {/* Lista de Arquivos com cores dark */}
+                {files.length > 0 && (
+                  <div className="space-y-2 animate-in fade-in zoom-in-95 duration-300">
+                    <div className="flex justify-between text-sm font-medium text-muted-foreground">
+                      <span>Capacidade utilizada</span>
+                      <span className={progressPercentage > 90 ? "text-destructive" : ""}>{progressPercentage.toFixed(0)}% ({formatBytes(totalSize)})</span>
+                    </div>
+                    <Progress value={progressPercentage} className={`h-2 ${progressPercentage > 90 ? "bg-destructive/20 [&>div]:bg-destructive" : ""}`} />
+                  </div>
+                )}
                 {files.length > 0 && (
                   <div className="bg-card border border-border rounded-xl p-4 space-y-3">
                     {files.map((file, index) => (
@@ -353,6 +484,7 @@ export default function NovaManifestacao() {
             </div>
           )}
 
+          {/* Passo 5: Confirmação */}
           {step === 5 && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 flex-1">
               <div className="text-center space-y-3 mb-10"><h2 className="text-3xl font-bold text-foreground">Dados do Manifestante</h2><p className="text-lg text-muted-foreground">Confirme seus dados.</p></div>
@@ -378,6 +510,7 @@ export default function NovaManifestacao() {
             </div>
           )}
 
+          {/* Botões */}
           <div className="pt-10 mt-auto border-t border-border flex justify-between items-center gap-4 w-full">
             <Button variant="outline" onClick={handleBack} className="h-12 md:h-14 px-4 md:px-8 text-base md:text-lg font-medium border-border text-muted-foreground hover:bg-muted rounded-xl">Voltar</Button>
             <Button onClick={step === 5 ? handleSubmit : handleNext} disabled={isLoading} className="h-12 md:h-14 px-6 md:px-10 text-base md:text-lg font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl shadow-lg shadow-primary/20">{step === 5 ? (isLoading ? "Enviando..." : "Confirmar") : "Próxima Etapa"}</Button>

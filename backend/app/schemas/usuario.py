@@ -61,3 +61,9 @@ class Token(BaseModel):
     """
     access_token: str
     token_type: str
+    
+class UsuarioUpdate(BaseModel):
+    """
+    Schema para atualizar dados do perfil (apenas o que é permitido).
+    """
+    telefone: Optional[str] = None

@@ -5,6 +5,9 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider } from "./contexts/AuthContext";
+// --- 1. IMPORTAR O CONTEXTO DO CHAT ---
+import { ChatProvider } from "./contexts/ChatContext"; 
+
 import Layout from "./components/Layout";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
@@ -14,8 +17,11 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import MinhasManifestacoes from "./pages/MinhasManifestacoes";
 import DetalhesManifestacao from "./pages/DetalhesManifestacao";
-// Importação do componente real
+import MeuPerfil from "./pages/MeuPerfil";
 import NovaManifestacao from "./pages/NovaManifestacao"; 
+
+// --- 2. IMPORTAR A DORA ---
+import ChatbotAssistente from "./components/ChatbotAssistente";
 
 function Router() {
   return (
@@ -39,23 +45,20 @@ function Router() {
         </Route>
 
         <Route path="/manifestacao/:protocolo">
-        <ProtectedRoute>
-          <DetalhesManifestacao />
-        </ProtectedRoute>
-      </Route>
+          <ProtectedRoute>
+            <DetalhesManifestacao />
+          </ProtectedRoute>
+        </Route>
 
-       
         <Route path="/nova-manifestacao">
           <ProtectedRoute>
             <NovaManifestacao />
           </ProtectedRoute>
-        </Route>
-
-        
+        </Route>       
 
         <Route path="/perfil">
           <ProtectedRoute>
-            <div className="p-4 text-center text-muted-foreground">Meu Perfil</div>
+            <MeuPerfil/>
           </ProtectedRoute>
         </Route>
 
@@ -71,10 +74,18 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
         <AuthProvider>
-          <TooltipProvider>
-            <Toaster position="top-center" />
-            <Router />
-          </TooltipProvider>
+          {/* 3. ENVOLVER A APLICAÇÃO COM O CHATPROVIDER */}
+          <ChatProvider>
+            <TooltipProvider>
+              <Toaster position="top-center" />
+              
+              <Router />
+              
+              {/* 4. A DORA FICA AQUI (Global para todo o app) */}
+              <ChatbotAssistente />
+              
+            </TooltipProvider>
+          </ChatProvider>
         </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>

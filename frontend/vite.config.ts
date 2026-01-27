@@ -1,15 +1,16 @@
 import { jsxLocPlugin } from "@builder.io/vite-plugin-jsx-loc";
-import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import path from "node:path";
-import { defineConfig } from "vite";
-import { VitePWA } from "vite-plugin-pwa";
+import path from "node:path"; // <--- Faltava importar
+import { defineConfig } from "vite"; // <--- Faltava importar
+import { VitePWA } from "vite-plugin-pwa"; // <--- Faltava importar (O erro era aqui)
+
+// SEM O IMPORT DO TAILWIND AQUI (Isso está correto, removemos o plugin da v4)
 
 const plugins = [
   react(),
-  tailwindcss(),
   jsxLocPlugin(),
-  // PWA Configuration
+  // SEM O tailwindcss() AQUI (Correto também)
+  
   VitePWA({
     registerType: 'autoUpdate',
     includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
