@@ -3,7 +3,7 @@ Manifestacao Business Logic Service
 Arquivo: backend/app/services/manifestacao_service.py
 """
 
-from sqlalchemy.orm import Session, joinedload # IMPORTANTE: Importar joinedload
+from sqlalchemy.orm import Session, joinedload 
 from sqlalchemy import desc, func, cast, Date
 from uuid import uuid4
 from datetime import datetime, timedelta
@@ -12,7 +12,7 @@ from typing import List, Dict, Optional
 from app.models.manifestacao import Manifestacao
 from app.models.protocolo import Protocolo
 from app.models.anexo import Anexo
-from app.schemas.manifestacao import ManifestacaoCreate, ManifestacaoUpdate
+from app.schemas.manifestacao import ManifestacaoCreate
 import logging
 
 logger = logging.getLogger(__name__)
@@ -33,31 +33,21 @@ class ManifestacaoService:
         usuario_id: Optional[str] = None, 
         arquivos_metadata: List[Dict] = []
     ) -> Manifestacao:
-        """
-        Cria:
-        1. Manifestação (vinculada ao usuario_id se fornecido)
-        2. Registro na tabela Protocolos (Auditoria)
-        3. Registros na tabela Anexos (se houver)
-        """
         # 1. Gerar IDs e Datas
         manifestacao_id = str(uuid4())
         data_hoje = datetime.now()
         
-        # Gera Protocolo: OUVIDORIA-YYYYMMDD-XXXXXX
         data_formatada = data_hoje.strftime("%Y%m%d")
         sufixo = str(uuid4().hex)[:6].upper()
         protocolo_texto = f"OUVIDORIA-{data_formatada}-{sufixo}"
         
-        # Prazo (30 dias)
         data_limite = data_hoje + timedelta(days=30)
 
-        # 2. Calcular Sequência Diária
         ultima_sequencia = db.query(func.max(Protocolo.sequencia_diaria))\
             .filter(cast(Protocolo.data_geracao, Date) == data_hoje.date())\
             .scalar()
         nova_sequencia = (ultima_sequencia or 0) + 1
 
-        # 3. Criar Objeto Manifestação
         nova_manifestacao = Manifestacao(
             id=manifestacao_id,
             protocolo=protocolo_texto,
@@ -71,7 +61,6 @@ class ManifestacaoService:
             data_criacao=data_hoje
         )
 
-        # 4. Criar Objeto Protocolo (Auditoria)
         novo_protocolo = Protocolo(
             numero=protocolo_texto,
             manifestacao_id=manifestacao_id,
@@ -85,7 +74,6 @@ class ManifestacaoService:
             db.add(novo_protocolo)
             db.flush() 
 
-            # 5. Salvar metadados dos Anexos no Banco
             for arq in arquivos_metadata:
                 novo_anexo = Anexo(
                     id=str(uuid4()),
@@ -97,13 +85,7 @@ class ManifestacaoService:
                 db.add(novo_anexo)
 
             db.commit()
-            
-            # Recarrega o objeto com os relacionamentos (Assunto e Anexos)
-            # Isso garante que a resposta da API já venha completa
             db.refresh(nova_manifestacao)
-            
-            # Força o carregamento do assunto para garantir que vá no response
-            # (opcional aqui se usar joinedload na consulta, mas bom pra garantir no create)
             _ = nova_manifestacao.assunto 
             
             logger.info(f"Manifestação criada com sucesso: {protocolo_texto}")
@@ -119,7 +101,6 @@ class ManifestacaoService:
     # ==========================================
     @staticmethod
     def obter_manifestacao(db: Session, protocolo: str) -> Optional[Manifestacao]:
-        # ADICIONADO: options(joinedload(...)) para trazer o Assunto e Anexos junto
         return db.query(Manifestacao)\
             .options(joinedload(Manifestacao.assunto))\
             .options(joinedload(Manifestacao.anexos))\
@@ -127,23 +108,30 @@ class ManifestacaoService:
             .first()
 
     # ==========================================
-    # BLOCO 3: LISTAGEM PAGINADA (GET)
+    # BLOCO 3: LISTAGEM PAGINADA (GET) - CORRIGIDO
     # ==========================================
     @staticmethod
     def listar_manifestacoes(
         db: Session,
         skip: int = 0,
-        limit: int = 10
+        limit: int = 10,
+        usuario_id: Optional[str] = None # NOVO PARÂMETRO
     ) -> tuple[List[Manifestacao], int]:
         
-        # Query base com ordenação
-        query = db.query(Manifestacao).order_by(desc(Manifestacao.data_criacao))
+        # Query base
+        query = db.query(Manifestacao)
+
+        # SE TIVER ID DE USUÁRIO, FILTRA APENAS AS DELE
+        if usuario_id:
+            query = query.filter(Manifestacao.usuario_id == usuario_id)
+
+        # Ordenação
+        query = query.order_by(desc(Manifestacao.data_criacao))
         
-        # Contagem total antes do limit/offset
+        # Contagem total (considerando o filtro acima)
         total = query.count()
         
-        # ADICIONADO: joinedload para trazer o nome do assunto em cada item da lista
-        # Isso evita o problema "N+1 queries" e preenche o card no frontend
+        # Paginação e Joins
         lista = query.options(joinedload(Manifestacao.assunto))\
                      .options(joinedload(Manifestacao.anexos))\
                      .offset(skip)\

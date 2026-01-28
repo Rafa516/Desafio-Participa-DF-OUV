@@ -20,20 +20,13 @@ class Usuario(Base):
     # IDENTIFICADORES E ACESSO
     # ==========================================================================
     id = Column(String(36), primary_key=True, index=True)
-    
-    # E-mail é a chave de login (unique=True impede duplicidade)
     email = Column(String(255), unique=True, index=True, nullable=False)
-    
-    # CPF opcional (pode ser usado para validar cidadão real)
     cpf = Column(String(11), unique=True, index=True, nullable=True)
 
     # ==========================================================================
-    # SEGURANÇA (Adicionado para Autenticação)
+    # SEGURANÇA
     # ==========================================================================
-    # Armazena o hash Bcrypt da senha. NUNCA armazene senhas em texto puro!
     senha_hash = Column(String(255), nullable=True) 
-    
-    # Define se é um gestor da ouvidoria (True) ou cidadão comum (False)
     admin = Column(Boolean, default=False)
 
     # ==========================================================================
@@ -45,22 +38,21 @@ class Usuario(Base):
     # ==========================================================================
     # STATUS E AUDITORIA
     # ==========================================================================
-    # Se False, o usuário não consegue logar (banido ou inativo)
     ativo = Column(Boolean, default=True)
 
-    # Datas automáticas
     data_criacao = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Data mostrada no "Meu Perfil" (atualizada em todo login)
     ultimo_acesso = Column(DateTime(timezone=True), nullable=True)
+    
+    # NOVO CAMPO: Data de referência para o sininho (atualizada ao clicar em "Marcar como lido")
+    ultimo_visto_notificacoes = Column(DateTime(timezone=True), nullable=True)
 
     # ==========================================================================
     # RELACIONAMENTOS
     # ==========================================================================
-    # Relacionamento com as manifestações criadas por este usuário.
-    # Nota: Para funcionar, a tabela 'manifestacoes' precisará ter uma coluna 'usuario_id'.
-    # Por enquanto, deixamos configurado aqui.
     manifestacoes = relationship("Manifestacao", back_populates="usuario")
+    movimentacoes = relationship("Movimentacao", back_populates="autor")
 
     def __repr__(self):
         return f"<Usuario(email={self.email}, nome={self.nome}, admin={self.admin})>"
-    
-    movimentacoes = relationship("Movimentacao", back_populates="autor")

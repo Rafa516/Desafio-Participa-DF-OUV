@@ -1,13 +1,19 @@
 import { useState, useEffect } from "react";
 import { useLocation, useRoute } from "wouter";
 import { manifestacaoService } from "@/services/manifestacaoService";
-import { Manifestacao } from "@/lib/api";
+import { Manifestacao, api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useAuth } from "@/contexts/AuthContext";
 import { 
   ArrowLeft, Calendar, FileText, Paperclip, 
   MapPin, Clock, CheckCircle2, AlertCircle, 
   Download, File as FileIcon, Tag,
-  FileImage, FileVideo, FileAudio 
+  FileImage, FileVideo, FileAudio,
+  MessageSquare, ShieldCheck, Lock, UserCircle2
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -20,6 +26,7 @@ const formatDate = (dateString: string) => {
   });
 };
 
+// CORREÇÃO: Normaliza tudo para MINÚSCULO para evitar erro com o Backend
 const getStatusStep = (status: string) => {
   const s = status?.toLowerCase() || "";
   const steps = ["pendente", "recebida", "em_processamento", "concluida"];
@@ -27,6 +34,7 @@ const getStatusStep = (status: string) => {
   return steps.indexOf(s);
 };
 
+// CORREÇÃO: Cores baseadas em chaves minúsculas
 const getStatusColor = (status: string) => {
   const s = status?.toLowerCase() || "";
   switch (s) {
@@ -39,11 +47,15 @@ const getStatusColor = (status: string) => {
   }
 };
 
+// CORREÇÃO: Mapa visual com chaves minúsculas
 const formatStatus = (status: string) => {
   const s = status?.toLowerCase() || "";
   const map: Record<string, string> = {
-    pendente: "Pendente", recebida: "Recebida", em_processamento: "Em Análise",
-    concluida: "Concluída", rejeitada: "Rejeitada"
+    pendente: "Pendente", 
+    recebida: "Recebida", 
+    em_processamento: "Em Análise",
+    concluida: "Concluída", 
+    rejeitada: "Rejeitada"
   };
   return map[s] || status;
 };
@@ -51,8 +63,17 @@ const formatStatus = (status: string) => {
 export default function DetalhesManifestacao() {
   const [, params] = useRoute("/manifestacao/:protocolo");
   const [location, setLocation] = useLocation();
+  const { user } = useAuth();
+  
   const [manifestacao, setManifestacao] = useState<Manifestacao | null>(null);
+  const [historico, setHistorico] = useState<any[]>([]); 
   const [loading, setLoading] = useState(true);
+
+  // Estados do Formulário Admin
+  const [adminTexto, setAdminTexto] = useState("");
+  const [adminStatus, setAdminStatus] = useState("");
+  const [adminInterno, setAdminInterno] = useState(false);
+  const [sendingMov, setSendingMov] = useState(false);
 
   useEffect(() => {
     if (params?.protocolo) loadData(params.protocolo);
@@ -63,12 +84,62 @@ export default function DetalhesManifestacao() {
       setLoading(true);
       const data = await manifestacaoService.consultarPorProtocolo(protocolo);
       setManifestacao(data);
+      
+      if(data) {
+          // CORREÇÃO: Converte para minúsculo ao carregar para garantir compatibilidade
+          setAdminStatus(data.status?.toLowerCase()); 
+          
+          try {
+            const token = localStorage.getItem("token");
+            const resHist = await api.get(`/movimentacoes/${data.id}`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            setHistorico(resHist.data);
+          } catch (err) {
+            console.error("Erro ao carregar histórico", err);
+          }
+      }
     } catch (error) {
       console.error(error);
       toast.error("Erro ao carregar detalhes.");
       setLocation("/manifestacoes");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAdminAction = async () => {
+    if (!manifestacao) return;
+    if (!adminTexto.trim()) return toast.error("Escreva um despacho ou resposta.");
+
+    try {
+        setSendingMov(true);
+        const formData = new FormData();
+        formData.append("texto", adminTexto);
+        formData.append("interno", String(adminInterno));
+        
+        // CORREÇÃO: Compara e envia sempre em minúsculo
+        const currentStatusLower = manifestacao.status?.toLowerCase();
+        if (adminStatus && adminStatus !== currentStatusLower) {
+            formData.append("novo_status", adminStatus); // Já está minúsculo vindo do Select
+        }
+
+        const token = localStorage.getItem("token");
+        await api.post(`/movimentacoes/${manifestacao.id}`, formData, {
+            headers: { "Authorization": `Bearer ${token}` }
+        });
+
+        toast.success("Movimentação registrada com sucesso!");
+        
+        setAdminTexto("");
+        setAdminInterno(false);
+        loadData(manifestacao.protocolo); 
+
+    } catch (error) {
+        console.error(error);
+        toast.error("Erro ao registrar movimentação.");
+    } finally {
+        setSendingMov(false);
     }
   };
 
@@ -124,10 +195,10 @@ export default function DetalhesManifestacao() {
       <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-10">
           
-          {/* COLUNA ESQUERDA */}
+          {/* COLUNA ESQUERDA (Dados + Histórico) */}
           <div className="lg:col-span-2 space-y-8">
             
-            {/* TIMELINE */}
+            {/* TIMELINE VISUAL */}
             <div className="bg-card p-6 rounded-3xl border border-border shadow-sm">
               <h3 className="font-semibold text-foreground mb-8 flex items-center gap-2">
                 <Clock className="w-5 h-5 text-primary" />
@@ -153,7 +224,7 @@ export default function DetalhesManifestacao() {
               </div>
             </div>
 
-            {/* RELATO */}
+            {/* RELATO ORIGINAL */}
             <div className="bg-card p-8 rounded-3xl border border-border shadow-sm space-y-4">
               <div className="flex items-center gap-2 mb-2">
                 <FileText className="w-5 h-5 text-primary" />
@@ -193,10 +264,104 @@ export default function DetalhesManifestacao() {
                 </div>
               </div>
             )}
+
+            {/* HISTÓRICO DE TRAMITAÇÃO */}
+            <div className="bg-card p-8 rounded-3xl border border-border shadow-sm space-y-6">
+                <div className="flex items-center gap-2 mb-4 border-b border-border pb-4">
+                    <MessageSquare className="w-5 h-5 text-primary" />
+                    <h3 className="font-semibold text-foreground text-lg">Histórico de Tramitação</h3>
+                </div>
+
+                {historico.length === 0 ? (
+                    <div className="text-center py-8 bg-muted/20 rounded-2xl border border-dashed border-border">
+                        <p className="text-muted-foreground">Nenhuma movimentação registrada até o momento.</p>
+                    </div>
+                ) : (
+                    <div className="space-y-6">
+                        {historico.map((mov) => (
+                            <div key={mov.id} className={`flex gap-4 animate-in fade-in slide-in-from-bottom-2 ${mov.interno ? "bg-amber-50/50 dark:bg-amber-900/10 p-4 rounded-2xl border border-amber-200/50 dark:border-amber-800/50" : ""}`}>
+                                <div className="shrink-0 mt-1">
+                                    <div className="w-10 h-10 rounded-full bg-muted border border-border flex items-center justify-center">
+                                        <UserCircle2 className="w-6 h-6 text-muted-foreground" />
+                                    </div>
+                                </div>
+                                <div className="flex-1 space-y-1">
+                                    <div className="flex items-center justify-between flex-wrap gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-bold text-foreground text-sm">{mov.autor_nome || "Sistema"}</span>
+                                            {mov.autor_admin && <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold border border-primary/20">OUVIDORIA</span>}
+                                            {mov.interno && <span className="flex items-center gap-1 text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 px-2 py-0.5 rounded-full font-bold border border-amber-200"><Lock size={10} /> NOTA INTERNA</span>}
+                                        </div>
+                                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                            <Clock size={12} /> {formatDate(mov.data_criacao)}
+                                        </span>
+                                    </div>
+                                    <div className="text-foreground text-sm leading-relaxed whitespace-pre-wrap pt-1">
+                                        {mov.texto}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
           </div>
 
-          {/* COLUNA DIREITA */}
+          {/* COLUNA DIREITA (Info + Painel Admin) */}
           <div className="space-y-6">
+            
+            {/* --- PAINEL DO ADMINISTRADOR --- */}
+            {user?.admin && (
+                <div className="bg-primary/5 p-6 rounded-3xl border border-primary/20 shadow-sm space-y-6 animate-in slide-in-from-right-4">
+                    <h3 className="font-bold text-primary border-b border-primary/20 pb-3 flex items-center gap-2">
+                        <ShieldCheck className="w-5 h-5" />
+                        Área do Ouvidor
+                    </h3>
+                    
+                    {/* DROP DOWN AGORA COM VALORES EM MINÚSCULO  */}
+                    <div className="space-y-3">
+                        <Label>Tramitação (Alterar Status)</Label>
+                        <Select value={adminStatus} onValueChange={setAdminStatus}>
+                            {/* ADICIONADO w-full AQUI 👇 */}
+                            <SelectTrigger className="w-full bg-background border-primary/20">
+                                <SelectValue placeholder="Selecione..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="pendente">Pendente</SelectItem>
+                                <SelectItem value="recebida">Recebida</SelectItem>
+                                <SelectItem value="em_processamento">Em Análise</SelectItem>
+                                <SelectItem value="concluida">Concluída</SelectItem>
+                                <SelectItem value="rejeitada">Rejeitada</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="space-y-3">
+                        <Label>Despacho / Resposta</Label>
+                        <Textarea 
+                            placeholder="Escreva a resposta ao cidadão ou nota técnica interna..." 
+                            className="bg-background border-primary/20 min-h-[120px]"
+                            value={adminTexto}
+                            onChange={e => setAdminTexto(e.target.value)}
+                        />
+                    </div>
+
+                    <div className="flex items-center justify-between bg-background p-3 rounded-lg border border-primary/20">
+                        <div className="space-y-0.5">
+                            <Label className="cursor-pointer text-sm font-medium">Nota Interna?</Label>
+                            <p className="text-[10px] text-muted-foreground">O cidadão não verá isso.</p>
+                        </div>
+                        <Switch checked={adminInterno} onCheckedChange={setAdminInterno} />
+                    </div>
+
+                    <Button onClick={handleAdminAction} disabled={sendingMov} className="w-full font-bold shadow-md">
+                        {sendingMov ? "Processando..." : "Registrar Movimentação"}
+                    </Button>
+                </div>
+            )}
+            {/* ----------------------------------------------- */}
+
             <div className="bg-card p-6 rounded-3xl border border-border shadow-sm space-y-6">
               <h3 className="font-semibold text-foreground border-b border-border pb-3">Informações Gerais</h3>
               <div className="space-y-5">

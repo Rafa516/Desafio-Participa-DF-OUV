@@ -1,84 +1,138 @@
 """
 Service de Movimentações
 Arquivo: backend/app/services/movimentacao_service.py
-Objetivo: Contém a lógica de negócio para criar e listar interações.
 """
-from sqlalchemy.orm import Session
 from uuid import uuid4
-from fastapi import HTTPException
-from datetime import datetime
-from typing import List, Optional
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import desc, func, or_
+from datetime import datetime, timezone, timedelta 
 
-# Importamos os Modelos (Banco de Dados)
 from app.models.movimentacao import Movimentacao
 from app.models.manifestacao import Manifestacao
-from app.models.usuario import Usuario
+from app.models.usuario import Usuario 
+
+FUSO_BRASIL = timezone(timedelta(hours=-3))
 
 class MovimentacaoService:
-
-    @staticmethod
-    def criar_movimentacao(
-        db: Session, 
-        manifestacao_id: str, 
-        usuario_id: str, 
-        texto: str, 
-        interno: bool = False,
-        novo_status: Optional[str] = None
-    ) -> Movimentacao:
-        """
-        Cria uma nova interação (resposta) e opcionalmente atualiza o status da manifestação.
-        """
-        
-        # 1. VERIFICAÇÃO: A manifestação existe?
-        # Antes de salvar a resposta, precisamos garantir que o "pai" existe.
-        manifestacao = db.query(Manifestacao).filter(Manifestacao.id == manifestacao_id).first()
-        if not manifestacao:
-            raise HTTPException(status_code=404, detail="Manifestação não encontrada")
-
-        # 2. CRIAÇÃO: Monta o objeto da mensagem
-        nova_movimentacao = Movimentacao(
-            id=str(uuid4()),               # Gera um ID único
-            manifestacao_id=manifestacao_id, # Linka com a manifestação
-            autor_id=usuario_id,           # Linka com quem está logado
-            texto=texto,
-            interno=interno,
-            data_criacao=datetime.now()
-        )
-        
-        # Adiciona a mensagem na "fila" do banco
-        db.add(nova_movimentacao)
-
-        # 3. ATUALIZAÇÃO DO PAI (Lógica Extra)
-        # Se o admin mandou um novo status, atualizamos a Manifestação também
-        if novo_status:
-            manifestacao.status = novo_status
-            manifestacao.data_atualizacao = datetime.now()
-            
-            # Se o status for "concluida", gravamos a data de fechamento
-            if novo_status == "concluida":
-                manifestacao.data_conclusao = datetime.now()
-
-        # 4. FINALIZAÇÃO: Salva tudo no banco (Commit)
-        db.commit()
-        
-        # Recarrega o objeto para garantir que temos os dados atualizados (como datas)
-        db.refresh(nova_movimentacao)
-        
-        return nova_movimentacao
-
+    
     @staticmethod
     def listar_historico(db: Session, manifestacao_id: str, usuario_eh_admin: bool):
-        """
-        Busca todas as mensagens de uma manifestação.
-        """
-        # Pega todas as movimentações daquela manifestação
-        query = db.query(Movimentacao).filter(Movimentacao.manifestacao_id == manifestacao_id)
-        
-        # REGRA DE SEGURANÇA:
-        # Se quem está pedindo NÃO for admin (ou seja, é o cidadão),
-        # filtramos para esconder as mensagens marcadas como "interno".
+        query = db.query(Movimentacao)\
+            .options(joinedload(Movimentacao.autor))\
+            .filter(Movimentacao.manifestacao_id == manifestacao_id)
+
         if not usuario_eh_admin:
             query = query.filter(Movimentacao.interno == False)
             
-        # Retorna ordenado por data (da mais antiga para a mais nova)
-        return query.order_by(Movimentacao.data_criacao).all()
+        return query.order_by(Movimentacao.data_criacao.asc()).all()
+
+    @staticmethod
+    def criar_movimentacao(db: Session, manifestacao_id: str, usuario_id: str, texto: str, interno: bool = False, novo_status: str = None) -> Movimentacao:
+        agora = datetime.now(FUSO_BRASIL)
+        nova_mov = Movimentacao(
+            id=str(uuid4()),
+            manifestacao_id=manifestacao_id,
+            autor_id=usuario_id,
+            texto=texto,
+            interno=interno,
+            data_criacao=agora 
+        )
+        db.add(nova_mov)
+        
+        if novo_status:
+            manifestacao = db.query(Manifestacao).filter(Manifestacao.id == manifestacao_id).first()
+            if manifestacao:
+                manifestacao.status = novo_status
+                manifestacao.data_atualizacao = agora 
+                if novo_status in ['concluida', 'rejeitada']:
+                    manifestacao.data_conclusao = agora
+                db.add(manifestacao)
+
+        db.commit()
+        db.refresh(nova_mov)
+        return nova_mov
+
+    @staticmethod
+    def contar_novas_movimentacoes(db: Session, usuario_id: str, is_admin: bool) -> int:
+        usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+        
+        # Se não tiver data de 'visto', usa a criação da conta para não pegar tudo desde o inicio dos tempos
+        data_referencia = usuario.ultimo_visto_notificacoes or usuario.ultimo_acesso or usuario.data_criacao
+
+        if not data_referencia:
+            return 0
+
+        # 1. Conta Novas Respostas (Movimentações) de outros autores
+        query_mov = db.query(func.count(Movimentacao.id))\
+            .join(Manifestacao, Movimentacao.manifestacao_id == Manifestacao.id)\
+            .filter(Movimentacao.data_criacao > data_referencia)\
+            .filter(Movimentacao.autor_id != usuario_id) 
+
+        if not is_admin:
+            query_mov = query_mov.filter(Manifestacao.usuario_id == usuario_id)
+            query_mov = query_mov.filter(Movimentacao.interno == False)
+        
+        qtd_movimentacoes = query_mov.scalar() or 0
+
+        # 2. Se for ADMIN, soma também as NOVAS MANIFESTAÇÕES criadas no período
+        qtd_novas_manifestacoes = 0
+        if is_admin:
+            qtd_novas_manifestacoes = db.query(func.count(Manifestacao.id))\
+                .filter(Manifestacao.data_criacao > data_referencia)\
+                .scalar() or 0
+
+        return qtd_movimentacoes + qtd_novas_manifestacoes
+
+    @staticmethod
+    def listar_notificacoes_detalhadas(db: Session, usuario_id: str, is_admin: bool):
+        usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+        data_referencia = usuario.ultimo_visto_notificacoes or usuario.ultimo_acesso or usuario.data_criacao
+        
+        if not data_referencia:
+            return []
+
+        notificacoes = []
+
+        # A. Busca Movimentações (Respostas)
+        query_mov = db.query(Movimentacao)\
+            .join(Manifestacao, Movimentacao.manifestacao_id == Manifestacao.id)\
+            .options(joinedload(Movimentacao.manifestacao))\
+            .filter(Movimentacao.data_criacao > data_referencia)\
+            .filter(Movimentacao.autor_id != usuario_id)
+
+        if not is_admin:
+            query_mov = query_mov.filter(Manifestacao.usuario_id == usuario_id)
+            query_mov = query_mov.filter(Movimentacao.interno == False)
+        
+        movs = query_mov.order_by(desc(Movimentacao.data_criacao)).limit(5).all()
+        for m in movs:
+            notificacoes.append({
+                "id": m.id,
+                "protocolo": m.manifestacao.protocolo,
+                "resumo": f"Nova resposta: {m.texto[:40]}...",
+                "data": m.data_criacao
+            })
+
+        # B. Busca Novas Manifestações (SÓ ADMIN)
+        if is_admin:
+            novas_manif = db.query(Manifestacao)\
+                .filter(Manifestacao.data_criacao > data_referencia)\
+                .order_by(desc(Manifestacao.data_criacao))\
+                .limit(5).all()
+            
+            for nm in novas_manif:
+                # Tenta pegar o nome do assunto, se disponível
+                tipo = "Manifestação"
+                if hasattr(nm, 'assunto') and nm.assunto:
+                    tipo = nm.assunto.nome
+                
+                notificacoes.append({
+                    "id": nm.id,
+                    "protocolo": nm.protocolo,
+                    "resumo": f"🆕 Nova: {tipo}",
+                    "data": nm.data_criacao
+                })
+
+        # Ordena tudo por data (decrescente) e pega as top 5 mais recentes
+        notificacoes.sort(key=lambda x: x['data'], reverse=True)
+        return notificacoes[:5]

@@ -4,9 +4,10 @@ import { manifestacaoService } from "@/services/manifestacaoService";
 import { Manifestacao } from "@/lib/api"; 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
-  Search, FileText, Calendar, Filter, Eye, 
-  Paperclip, Tag, Lock, AlertTriangle, UserX 
+  Search, FileText, Calendar, Eye, 
+  Paperclip, Tag, Lock, AlertTriangle, UserX, XCircle 
 } from "lucide-react"; 
 import { toast } from "sonner";
 
@@ -20,7 +21,6 @@ const formatDate = (dateString: string) => {
 
 const getStatusColor = (status: string) => {
   switch (status?.toLowerCase()) {
-    // Usando cores com transparência (/20) para funcionar bem no Dark Mode
     case "pendente": return "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30";
     case "recebida": return "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/30";
     case "em_processamento": return "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/30";
@@ -50,7 +50,12 @@ const formatClassificacao = (tipo: string) => {
 export default function MinhasManifestacoes() {
   const [manifestacoes, setManifestacoes] = useState<Manifestacao[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // --- FILTROS ---
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("todos");
+  const [typeFilter, setTypeFilter] = useState("todos");
+  const [anonimoFilter, setAnonimoFilter] = useState("todos");
 
   useEffect(() => { fetchManifestacoes(); }, []);
 
@@ -68,10 +73,36 @@ export default function MinhasManifestacoes() {
     }
   };
 
-  const filteredManifestacoes = manifestacoes.filter(m => 
-    m.protocolo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (m.assunto?.nome || "").toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // --- LÓGICA DE FILTRAGEM ---
+  const filteredManifestacoes = manifestacoes.filter(m => {
+    // 1. Busca textual
+    const matchesSearch = 
+      m.protocolo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (m.assunto?.nome || "").toLowerCase().includes(searchTerm.toLowerCase());
+
+    // 2. Status
+    const matchesStatus = statusFilter === "todos" || m.status?.toLowerCase() === statusFilter;
+
+    // 3. Classificação
+    const matchesType = typeFilter === "todos" || m.classificacao === typeFilter;
+
+    // 4. Anonimato
+    const matchesAnonimo = anonimoFilter === "todos" 
+      ? true 
+      : anonimoFilter === "sim" ? m.anonimo === true 
+      : m.anonimo === false;
+
+    return matchesSearch && matchesStatus && matchesType && matchesAnonimo;
+  });
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setStatusFilter("todos");
+    setTypeFilter("todos");
+    setAnonimoFilter("todos");
+  };
+
+  const hasActiveFilters = searchTerm || statusFilter !== "todos" || typeFilter !== "todos" || anonimoFilter !== "todos";
 
   return (
     <div className="w-full flex flex-col gap-4 animate-in fade-in duration-500 h-[calc(100vh-2rem)] md:h-[calc(100vh-3rem)]">
@@ -91,20 +122,74 @@ export default function MinhasManifestacoes() {
           </Link>
         </div>
 
-        {/* Barra de Busca (bg-card) */}
-        <div className="bg-card p-4 rounded-2xl shadow-sm border border-border flex gap-3 items-center">
-          <div className="relative flex-1">
+        {/* ÁREA DE BUSCA E FILTROS */}
+        <div className="bg-card p-4 rounded-2xl shadow-sm border border-border flex flex-col gap-3">
+          
+          {/* Barra de Busca */}
+          <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-5 h-5" />
             <Input 
               placeholder="Buscar por protocolo ou assunto..." 
-              className="pl-10 h-12 bg-background border-border rounded-xl focus:ring-2 focus:ring-primary outline-none transition-all text-foreground"
+              className="pl-10 h-12 bg-background border-border rounded-xl focus:ring-2 focus:ring-primary outline-none transition-all text-foreground w-full"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <Button variant="outline" className="h-12 w-12 px-0 rounded-xl border-border text-muted-foreground hover:bg-muted">
-            <Filter className="w-5 h-5" />
-          </Button>
+
+          {/* Grid de Filtros VISÍVEIS */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+            
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="h-10 bg-background border-border rounded-lg">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os Status</SelectItem>
+                <SelectItem value="pendente">Pendente</SelectItem>
+                <SelectItem value="recebida">Recebida</SelectItem>
+                <SelectItem value="em_processamento">Em Análise</SelectItem>
+                <SelectItem value="concluida">Concluída</SelectItem>
+                <SelectItem value="rejeitada">Rejeitada</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="h-10 bg-background border-border rounded-lg">
+                <SelectValue placeholder="Classificação" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todas Classificações</SelectItem>
+                <SelectItem value="reclamacao">Reclamação</SelectItem>
+                <SelectItem value="denuncia">Denúncia</SelectItem>
+                <SelectItem value="elogio">Elogio</SelectItem>
+                <SelectItem value="sugestao">Sugestão</SelectItem>
+                <SelectItem value="solicitacao">Solicitação</SelectItem>
+                <SelectItem value="informacao">Informação</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={anonimoFilter} onValueChange={setAnonimoFilter}>
+              <SelectTrigger className="h-10 bg-background border-border rounded-lg">
+                <SelectValue placeholder="Identificação" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todas (Identificadas e Anônimas)</SelectItem>
+                <SelectItem value="nao">Identificadas</SelectItem>
+                <SelectItem value="sim">Anônimas</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {hasActiveFilters && (
+              <Button 
+                  variant="ghost" 
+                  onClick={clearFilters}
+                  className="h-10 text-destructive hover:bg-destructive/10 hover:text-destructive w-full"
+              >
+                  <XCircle className="w-4 h-4 mr-2" />
+                  Limpar
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -135,8 +220,13 @@ export default function MinhasManifestacoes() {
               </div>
               <h3 className="text-xl font-semibold text-foreground">Nenhum registro encontrado</h3>
               <p className="text-muted-foreground mt-2 max-w-md">
-                Você ainda não tem registros com esses critérios.
+                Tente ajustar os filtros ou buscar por outro termo.
               </p>
+              {hasActiveFilters && (
+                  <Button variant="link" onClick={clearFilters} className="mt-2 text-primary">
+                      Limpar filtros
+                  </Button>
+              )}
             </div>
           ) : (
             filteredManifestacoes.map((item) => {

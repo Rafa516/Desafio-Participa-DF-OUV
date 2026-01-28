@@ -3,13 +3,11 @@ import traceback
 import logging
 from typing import Optional, Any
 
-# Adicionado Form para gerar os inputs no Swagger
 from fastapi import APIRouter, Depends, HTTPException, status, Form
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from jose import jwt, JWTError
 from passlib.context import CryptContext
-
 
 from app.database import get_db
 from app.config import settings
@@ -17,11 +15,9 @@ from app.services.auth_service import AuthService
 from app.schemas.usuario import UsuarioCreate, UsuarioResponse, Token, UsuarioLogin, UsuarioUpdate
 from app.models.usuario import Usuario 
 
-# --- CONFIGURAÇÕES GERAIS ---
 logger = logging.getLogger("uvicorn")
 pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
 
-# Configuração do Fuso Horário de Brasília (GMT-3)
 FUSO_BRASIL = timezone(timedelta(hours=-3))
 
 router = APIRouter(
@@ -31,16 +27,10 @@ router = APIRouter(
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-# ==============================================================================
-# DEPENDÊNCIA: OBTER USUÁRIO ATUAL
-# ==============================================================================
 def get_current_user(
     token: str = Depends(oauth2_scheme), 
     db: Session = Depends(get_db)
 ) -> Usuario:
-    """
-    Valida o token JWT e retorna o usuário logado.
-    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Não foi possível validar as credenciais",
@@ -60,9 +50,6 @@ def get_current_user(
         
     return user
 
-# ==============================================================================
-# ROTA: REGISTRAR NOVO USUÁRIO 
-# ==============================================================================
 @router.post("/registrar", response_model=UsuarioResponse, status_code=201)
 def registrar_usuario(
     nome: str = Form(...),
@@ -72,7 +59,6 @@ def registrar_usuario(
     telefone: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
-    # Converte os campos de formulário para o Schema esperado pelo Service
     usuario_data = UsuarioCreate(
         nome=nome, 
         email=email, 
@@ -80,30 +66,40 @@ def registrar_usuario(
         cpf=cpf, 
         telefone=telefone
     )
-    return AuthService.criar_usuario(db=db, usuario_data=usuario_data)
+    # Cria usuário e inicializa as datas como AGORA
+    novo_user = AuthService.criar_usuario(db=db, usuario_data=usuario_data)
+    agora = datetime.now(FUSO_BRASIL)
+    novo_user.ultimo_acesso = agora
+    novo_user.ultimo_visto_notificacoes = agora # Inicializa para não começar com notificação
+    db.add(novo_user)
+    db.commit()
+    
+    return novo_user
 
-# ==============================================================================
-# ROTA: LOGIN (Com Fuso Horário Corrigido)
-# ==============================================================================
 @router.post("/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     cpf_limpo = form_data.username.replace(".", "").replace("-", "")
     
-    # Lógica original: Busca por CPF
     usuario_db = db.query(Usuario).filter(Usuario.cpf == cpf_limpo).first()
     if not usuario_db:
         raise HTTPException(status_code=400, detail="CPF ou senha incorretos")
 
-    # Verifica senha
     if not AuthService.verificar_senha(form_data.password, usuario_db.senha_hash):
         raise HTTPException(status_code=400, detail="CPF ou senha incorretos")
 
     agora = datetime.now(FUSO_BRASIL)
+    
+    # Atualizamos o ultimo_acesso no banco
     usuario_db.ultimo_acesso = agora
+    
+    # Se o campo novo estiver vazio (migração), preenchemos
+    if not usuario_db.ultimo_visto_notificacoes:
+        usuario_db.ultimo_visto_notificacoes = agora
+        
     db.add(usuario_db)
     db.commit()
     
-    # Payload com dados extras para o Frontend
+    # --- CORREÇÃO AQUI: Injetamos 'ultimo_acesso' no Token ---
     token_acesso = AuthService.criar_token_acesso(data={
         "sub": usuario_db.email,
         "nome": usuario_db.nome,
@@ -112,23 +108,31 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         "cpf": usuario_db.cpf,     
         "id": str(usuario_db.id),
         "admin": usuario_db.admin,
-        "ultimo_acesso": agora.isoformat() 
+        "ultimo_acesso": str(agora) # Adicionado para aparecer no Perfil
     })
     
     return {"access_token": token_acesso, "token_type": "bearer"}
 
-# ==============================================================================
-# ROTA: ATUALIZAR PERFIL
-# ==============================================================================
+@router.post("/marcar-lido")
+def marcar_notificacoes_lidas(
+    db: Session = Depends(get_db),
+    current_user: Usuario = Depends(get_current_user)
+):
+    """
+    Chamada quando o usuário clica no sino.
+    Atualiza APENAS o 'ultimo_visto_notificacoes'.
+    """
+    current_user.ultimo_visto_notificacoes = datetime.now(FUSO_BRASIL)
+    db.add(current_user)
+    db.commit()
+    return {"status": "ok", "mensagem": "Notificações zeradas"}
+
 @router.put("/atualizar-perfil", response_model=UsuarioResponse)
 def atualizar_meu_perfil(
     dados: UsuarioUpdate,
     current_user: Usuario = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Atualiza dados do usuário logado (apenas telefone por enquanto).
-    """
     if dados.telefone is not None:
         current_user.telefone = dados.telefone
     
@@ -138,9 +142,6 @@ def atualizar_meu_perfil(
     
     return current_user
 
-# ==============================================================================
-# ROTA: ESQUECI MINHA SENHA 
-# ==============================================================================
 @router.post("/esqueci-senha")
 def solicitar_recuperacao_senha(
     email: str = Form(...), 
@@ -168,9 +169,6 @@ def solicitar_recuperacao_senha(
         "debug_link_autorizado": link 
     }
 
-# ==============================================================================
-# ROTA: REDEFINIR SENHA 
-# ==============================================================================
 @router.post("/redefinir-senha")
 def redefinir_senha(
     token: str = Form(...),

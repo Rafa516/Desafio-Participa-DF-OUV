@@ -46,9 +46,15 @@ class UsuarioResponse(BaseModel):
     id: str
     nome: str
     email: EmailStr
+    cpf: Optional[str] = None # Adicionado para garantir retorno no perfil
+    telefone: Optional[str] = None # Adicionado para garantir retorno no perfil
     admin: bool
     ativo: bool
     data_criacao: datetime
+    
+    # --- NOVOS CAMPOS DE CONTROLE DE DATA ---
+    ultimo_acesso: Optional[datetime] = None
+    ultimo_visto_notificacoes: Optional[datetime] = None
 
     class Config:
         # Permite ler direto do objeto do banco de dados (SQLAlchemy)

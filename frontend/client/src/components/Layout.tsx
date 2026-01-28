@@ -1,20 +1,97 @@
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
-import { Home, PlusCircle, List, User, MessageSquare, LogOut } from "lucide-react";
+import { Home, PlusCircle, List, User, LogOut, ShieldCheck, Bell, ExternalLink, MoreVertical, X } from "lucide-react"; 
 import { cn } from "@/lib/utils";
 import SkipLink from "./SkipLink";
 import AcessibilidadeMenu from "./AcessibilidadeMenu";
 import ChatbotAssistente from "./ChatbotAssistente";
 import { useAuth } from "@/contexts/AuthContext";
+import { api } from "@/lib/api"; 
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
-  const { logout, isAuthenticated } = useAuth();
+  const [location, setLocation] = useLocation();
+  const { logout, isAuthenticated, user } = useAuth();
+  
+  const [notificacoesCount, setNotificacoesCount] = useState(0);
+  const [notificacoesList, setNotificacoesList] = useState<any[]>([]);
+  const [showNotifMenu, setShowNotifMenu] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
 
-  // --- LÓGICA DE LAYOUT LIMPO (Login/Cadastro) ---
+  // Controle do menu mobile
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
+
+  // Fecha menus ao clicar fora
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      // Fecha menu de notificações (Desktop)
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        setShowNotifMenu(false);
+      }
+
+      // Fecha menu mobile
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
+          const target = event.target as Element;
+          const toggleBtn = document.getElementById('mobile-menu-toggle');
+          
+          // --- CORREÇÃO DO BUG DO TEMA ---
+          // Se o clique foi dentro de um Portal (Dropdown do tema), NÃO fecha o menu mobile.
+          // O atributo 'data-radix-portal' é usado por bibliotecas como Shadcn/Radix UI
+          const isPortal = target.closest('[data-radix-portal]') || target.closest('[role="menu"]');
+          
+          if (!toggleBtn?.contains(target) && !isPortal) {
+            setIsMobileMenuOpen(false);
+          }
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Fecha menu mobile ao mudar rota
+  useEffect(() => {
+      setIsMobileMenuOpen(false);
+  }, [location]);
+
+  // Busca notificações
+  useEffect(() => {
+    const fetchNotificacoes = async () => {
+        if (!isAuthenticated) return;
+        try {
+            const token = localStorage.getItem("token");
+            const response = await api.get(`/movimentacoes/notificacoes/novas?t=${Date.now()}`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            setNotificacoesCount(response.data.novas || 0);
+            setNotificacoesList(response.data.itens || []);
+        } catch (error) {
+            console.error("Erro ao buscar notificações:", error);
+        }
+    };
+
+    if (isAuthenticated) {
+        fetchNotificacoes();
+        const interval = setInterval(fetchNotificacoes, 15000); 
+        return () => clearInterval(interval);
+    }
+  }, [isAuthenticated, location]);
+
+  const handleMarkAsRead = async () => {
+    try {
+        const token = localStorage.getItem("token");
+        await api.post("/auth/marcar-lido", {}, {
+            headers: { "Authorization": `Bearer ${token}` }
+        });
+        setNotificacoesCount(0);
+        setShowNotifMenu(false);
+    } catch (error) {
+        console.error("Erro ao limpar", error);
+    }
+  };
+
   if (["/login", "/cadastro", "/esqueci-senha", "/redefinir-senha"].includes(location)) {
     return (
       <main className="min-h-screen bg-background font-sans text-foreground relative">
-        {/* Botão de Acessibilidade Flutuante */}
         <div className="absolute top-4 right-4 z-50">
           <AcessibilidadeMenu />
         </div>
@@ -23,41 +100,186 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // --- LAYOUT PADRÃO ---
-  const navItems = [
+  const allNavItems = [
     { icon: Home, label: "Início", path: "/" },
-    { icon: List, label: "Minhas Manifestações", path: "/manifestacoes" },
+    { 
+      icon: List, 
+      label: user?.admin ? "Todas Manifestações" : "Minhas Manifestações", 
+      path: "/manifestacoes" 
+    },
     { icon: PlusCircle, label: "Nova Manifestação", path: "/nova-manifestacao" },
-    { icon: MessageSquare, label: "Chat de Ajuda", path: "/chat-ajuda" },
     { icon: User, label: "Meu Perfil", path: "/perfil" },
   ];
+
+  const navItems = allNavItems.filter(item => {
+      if (user?.admin && item.path === "/nova-manifestacao") return false;
+      return true;
+  });
+
+  const showChatbot = !!user;
+
+  // --- COMPONENTE DO SINO ---
+  const NotificationBell = ({ isMobile = false }) => (
+    <div className={cn("relative", isMobile ? "w-full flex justify-end" : "")} ref={notifRef}>
+        <button 
+            onClick={(e) => { e.stopPropagation(); setShowNotifMenu(!showNotifMenu); }}
+            className="relative p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full transition-all outline-none"
+        >
+            <Bell size={isMobile ? 18 : 20} />
+            {notificacoesCount > 0 && (
+                <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-sm ring-2 ring-background animate-in zoom-in duration-300">
+                {notificacoesCount}
+                </span>
+            )}
+        </button>
+
+        {showNotifMenu && (
+            <div className={cn(
+                "bg-card dark:bg-zinc-900 border border-border rounded-xl shadow-xl z-[70] animate-in fade-in slide-in-from-top-2 overflow-hidden",
+                isMobile 
+                    ? "fixed top-20 left-4 right-4 w-auto mx-auto max-w-sm" // Mobile: Fixo e centralizado
+                    : "absolute mt-2 w-80 right-0" // Desktop: Absolute
+            )}>
+                <div className="p-3 border-b border-border bg-muted/30 flex justify-between items-center">
+                    <span className="font-bold text-sm">Notificações</span>
+                    {notificacoesCount > 0 && (
+                        <button onClick={handleMarkAsRead} className="text-xs text-primary hover:underline">
+                            Marcar como lidas
+                        </button>
+                    )}
+                </div>
+                <div className="max-h-64 overflow-y-auto custom-scrollbar">
+                    {notificacoesList.length === 0 ? (
+                        <div className="p-6 text-center text-muted-foreground text-sm">
+                            Nenhuma nova notificação.
+                        </div>
+                    ) : (
+                        notificacoesList.map((notif, idx) => (
+                            <div 
+                                key={idx} 
+                                onClick={() => { setLocation(`/manifestacao/${notif.protocolo}`); setShowNotifMenu(false); setIsMobileMenuOpen(false); }}
+                                className="p-3 hover:bg-muted/50 cursor-pointer border-b border-border last:border-0 transition-colors text-left"
+                            >
+                                <div className="flex justify-between items-start mb-1">
+                                    <span className="text-xs font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">#{notif.protocolo}</span>
+                                    <span className="text-[10px] text-muted-foreground">{new Date(notif.data).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                </div>
+                                <p className="text-sm text-foreground line-clamp-2 leading-snug">
+                                    {notif.resumo}
+                                </p>
+                            </div>
+                        ))
+                    )}
+                </div>
+                <div className="p-2 border-t border-border bg-muted/10 text-center">
+                    <Link href="/manifestacoes" onClick={() => { setIsMobileMenuOpen(false); setShowNotifMenu(false); }}>
+                        <span className="text-xs font-medium text-muted-foreground hover:text-primary cursor-pointer flex items-center justify-center gap-1">
+                            Ver todas <ExternalLink size={10} />
+                        </span>
+                    </Link>
+                </div>
+            </div>
+        )}
+    </div>
+  );
 
   return (
     <div className="h-screen bg-background flex flex-col font-sans text-foreground overflow-hidden transition-colors duration-300">
       <SkipLink />
       
       <header className="h-16 bg-card border-b border-border shadow-sm shrink-0 z-50 relative transition-colors duration-300">
-        <div className="w-full h-full px-6 flex items-center justify-between">
-           <div className="flex items-center gap-2">
-              <div className="flex items-center font-nunito font-bold text-2xl tracking-tight select-none">
-                <span className="text-[#21348e] dark:text-blue-400 text-3xl mr-0.5 transition-colors">&lt;</span>
+        <div className="w-full h-full px-4 md:px-6 flex items-center justify-between">
+           
+           <div className="flex flex-col md:flex-row items-start md:items-center gap-0.5 md:gap-2">
+              {/* Badge Admin (Mobile) */}
+              {user?.admin && (
+                <div className="md:hidden self-start px-1.5 py-[2px] bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-[4px] text-[8px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wider leading-none mb-0.5">
+                    MODO ADMIN
+                </div>
+              )}
+
+              <div className="flex items-center font-nunito font-bold text-xl md:text-2xl tracking-tight select-none truncate">
+                <span className="text-[#21348e] dark:text-blue-400 text-2xl md:text-3xl mr-0.5 transition-colors">&lt;</span>
                 <span className="text-[#21348e] dark:text-blue-400 transition-colors">ParticipaDF</span>
                 <span className="text-[#55bbf5]">-Ouvidoria</span>
-                <span className="text-[#55bbf5] text-3xl ml-0.5">&gt;</span>
+                <span className="text-[#55bbf5] text-2xl md:text-3xl ml-0.5">&gt;</span>
               </div>
           </div>
           
-          <div className="flex items-center gap-4">
-            <span className="hidden md:inline text-sm text-muted-foreground">Ouvidoria Digital Acessível</span>
-            <AcessibilidadeMenu />
-            {isAuthenticated && (
-              <button 
-                onClick={logout}
-                className="flex items-center gap-2 text-destructive hover:bg-destructive/10 px-3 py-1.5 rounded-md transition-colors text-sm font-medium"
-              >
-                <LogOut size={18} />
-                <span className="hidden sm:inline">Sair</span>
-              </button>
+          <div className="flex items-center gap-2">
+            
+            {/* Desktop Actions */}
+            <div className="hidden md:flex items-center gap-4">
+                <span className="text-sm text-muted-foreground">Ouvidoria Digital Acessível</span>
+                <AcessibilidadeMenu />
+                {isAuthenticated && (
+                  <>
+                    <NotificationBell />
+                    <button 
+                      onClick={logout}
+                      className="flex items-center gap-2 text-destructive hover:bg-destructive/10 px-3 py-1.5 rounded-md transition-colors text-sm font-medium"
+                    >
+                      <LogOut size={18} />
+                      <span>Sair</span>
+                    </button>
+                  </>
+                )}
+            </div>
+
+            {/* Mobile Actions Button */}
+            <button
+                id="mobile-menu-toggle"
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="md:hidden p-2 text-muted-foreground hover:bg-muted rounded-full outline-none"
+            >
+                {isMobileMenuOpen ? <X size={24} /> : <MoreVertical size={24} />}
+            </button>
+
+            {/* --- MENU MOBILE SUSPENSO --- */}
+            {isMobileMenuOpen && (
+                <div ref={mobileMenuRef} className="md:hidden absolute top-[50px] right-2 w-52 bg-card dark:bg-zinc-900 border border-border shadow-2xl rounded-lg flex flex-col z-50 animate-in fade-in slide-in-from-top-2 origin-top-right overflow-hidden">
+                    
+                    {isAuthenticated && (
+                        <>
+                           {/* 1. NOTIFICAÇÕES (AGORA NO TOPO) */}
+                           <div className="flex items-center justify-between h-9 px-3 hover:bg-muted/50 cursor-pointer border-b border-border/40" onClick={(e) => { e.stopPropagation(); setShowNotifMenu(!showNotifMenu) }}>
+                                <span className="text-sm font-medium text-foreground">Notificações</span>
+                                <NotificationBell isMobile={true} />
+                           </div>
+                           
+                           <div className="h-px bg-border my-0.5 opacity-50"></div>
+                        </>
+                    )}
+
+                    {/* 2. ACESSIBILIDADE/TEMA (AGORA NO MEIO) */}
+                    <div 
+                        className="flex items-center justify-between h-9 px-3 hover:bg-muted/50 cursor-pointer border-b border-border/40"
+                        onClick={(e) => {
+                            // Importante: Isso garante que o clique no "fundo" do item não feche o menu se clicar no componente de tema
+                            e.stopPropagation();
+                        }} 
+                    >
+                        <span className="text-sm font-medium text-foreground">Acessibilidade</span>
+                        <div className="flex justify-end">
+                            <AcessibilidadeMenu />
+                        </div>
+                    </div>
+
+                    {isAuthenticated && (
+                        <>
+                           <div className="h-px bg-border my-0.5 opacity-50"></div>
+
+                           {/* 3. SAIR */}
+                           <button 
+                             onClick={logout}
+                             className="flex items-center justify-between w-full h-9 px-3 text-destructive hover:bg-destructive/10 transition-colors text-sm font-medium"
+                           >
+                             <span>Sair da conta</span>
+                             <LogOut size={18} />
+                           </button>
+                        </>
+                    )}
+                </div>
             )}
           </div>
         </div>
@@ -65,6 +287,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       <div className="flex flex-1 overflow-hidden relative">
         <aside className="hidden md:flex flex-col w-64 bg-card border-r border-border shrink-0 h-full overflow-y-auto transition-colors duration-300">
+          
+          {user?.admin && (
+            <div className="mx-4 mt-6 mb-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 animate-in fade-in slide-in-from-left-2 shadow-sm">
+              <div className="p-2 bg-red-500/20 rounded-full shrink-0">
+                <ShieldCheck className="w-5 h-5 text-red-600 dark:text-red-400" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-red-700 dark:text-red-400 uppercase tracking-wider">Modo Admin</span>
+                <span className="text-[10px] text-red-600/80 dark:text-red-400/80 font-medium">Gestão Completa</span>
+              </div>
+            </div>
+          )}
+
           <nav className="flex flex-col p-4 gap-2">
             {navItems.map((item) => {
               const isActive = location === item.path;
@@ -89,16 +324,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </main>
       </div>
-      <ChatbotAssistente />
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border pb-safe z-50 transition-colors duration-300">
-        <div className="flex justify-around items-center h-16 px-2">
+
+      {showChatbot && <ChatbotAssistente />}
+      
+      {/* Menu Inferior Mobile */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card dark:bg-zinc-900 border-t border-border pb-safe z-50 transition-colors duration-300">
+        <div className="flex justify-around items-center h-16 px-1">
           {navItems.map((item) => {
             const isActive = location === item.path;
             return (
               <Link key={item.path} href={item.path}>
-                <div className={cn("flex flex-col items-center justify-center w-16 h-full gap-1 cursor-pointer", isActive ? "text-primary" : "text-muted-foreground")}>
-                  <item.icon size={24} strokeWidth={isActive ? 2.5 : 2} />
-                  <span className="text-[10px] font-medium">{item.label.split(' ')[0]}</span>
+                <div className={cn("flex flex-col items-center justify-center flex-1 h-full gap-0.5 cursor-pointer p-1 w-full", isActive ? "text-primary" : "text-muted-foreground")}>
+                  <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                  <span className="text-[10px] font-medium text-center leading-3 w-full break-words max-w-[85px]">
+                    {item.label}
+                  </span>
                 </div>
               </Link>
             );
