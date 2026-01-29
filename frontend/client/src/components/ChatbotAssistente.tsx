@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { X, Send, Bot, Trash2, ShieldCheck } from "lucide-react";
+import { X, Send, Bot, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -17,24 +17,21 @@ interface Message {
 }
 
 export default function ChatbotAssistente() {
-  const { mode, currentField, isOpen, setIsOpen } = useChat();
-  
+  const { currentField, isOpen, setIsOpen } = useChat();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [assuntosCache, setAssuntosCache] = useState<any[]>([]);
-  const [isGuideAccepted, setIsGuideAccepted] = useState(false);
-  
   const [pendingAssuntoId, setPendingAssuntoId] = useState<string | null>(null);
 
-  // REF para controlar se já avisamos sobre as notificações atuais
-  // Isso evita que a Dora fique repetindo a mesma mensagem a cada 10s
-  const lastNotifCountRef = useRef(0);
-
+  // Trava para abrir apenas uma vez após o login
+  const hasAutoOpenedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const [location, setLocation] = useLocation();
- 
+
+  const isNovaManifestacaoPage = location === "/nova-manifestacao";
+  const userName = user?.nome ? user.nome.split(' ')[0] : "Cidadão";
 
   const renderFormattedText = (text: string) => {
     if (!text.includes("**")) return text;
@@ -43,18 +40,11 @@ export default function ChatbotAssistente() {
   };
 
   const fetchAssuntos = async () => {
+    if (isNovaManifestacaoPage || user?.admin) return { text: "", options: [] };
     if (assuntosCache.length > 0) return { text: "Assuntos disponíveis:", options: assuntosCache.map(a => a.nome) };
     try {
       const response = await api.get("/assuntos/?apenas_ativos=true");
-      let dados = [];
-      if (response.data && Array.isArray(response.data.assuntos)) {
-          dados = response.data.assuntos;
-      } else if (Array.isArray(response.data)) {
-          dados = response.data;
-      } else if (response.data && Array.isArray(response.data.data)) {
-          dados = response.data.data;
-      }
-
+      const dados = response.data.assuntos || response.data || [];
       if (dados.length > 0) {
         setAssuntosCache(dados);
         return { text: "Assuntos disponíveis:", options: dados.map((a: any) => a.nome) };
@@ -63,253 +53,121 @@ export default function ChatbotAssistente() {
     } catch { return { text: "Erro ao buscar assuntos.", options: [] }; }
   };
 
-  // ==========================================================================
-  // LÓGICA DE NOTIFICAÇÃO DA DORA (10 SEGUNDOS)
-  // ==========================================================================
+  // 1. LÓGICA DE LOGIN: Abre a Dora se houver notificações pendentes
   useEffect(() => {
-    if (!user) return;
+    if (!user || hasAutoOpenedRef.current) return;
 
-    const checarNotificacoes = async () => {
+    const checarAberturaInicial = async () => {
         try {
-            // Timestamp evita cache
             const res = await api.get(`/movimentacoes/notificacoes/novas?t=${Date.now()}`);
-            const totalNovas = res.data.novas || 0;
-
-            // Só avisa se o número de notificações AUMENTOU em relação ao último check
-            // E se tiver pelo menos 1
-            if (totalNovas > lastNotifCountRef.current && totalNovas > 0) {
-                setMessages(prev => [
-                    ...prev, 
-                    { 
-                        id: Date.now(), 
-                        text: `🔔 **Psiu!** Tem novidade no sino.\nVocê tem **${totalNovas}** notificação(ões) pendente(s).`, 
-                        sender: "bot" 
-                    }
-                ]);
-                
-                // Opcional: Se quiser que o chat abra sozinho quando chegar notificação, descomente:
-                // setIsOpen(true); 
+            const count = res.data.novas || 0;
+            if (count > 0) {
+                setMessages([{ 
+                    id: Date.now(), 
+                    text: `Olá ${userName}! Você possui **${count}** atualização(ões) não lida(s). Verifique o sino no topo para detalhes!`, 
+                    sender: "bot",
+                    options: ["Entendido"]
+                }]);
+                setIsOpen(true);
+                hasAutoOpenedRef.current = true;
             }
-
-            // Atualiza a referência para o próximo ciclo
-            lastNotifCountRef.current = totalNovas;
-
-        } catch (err) {
-            console.error("Dora falhou ao checar notificações", err);
-        }
+        } catch (err) {}
     };
+    checarAberturaInicial();
+  }, [user, userName]);
 
-    // Roda a cada 10 segundos
-    const interval = setInterval(checarNotificacoes, 10000);
-    return () => clearInterval(interval);
-
-  }, [user, setIsOpen]); 
-  // ==========================================================================
-
-
-  useEffect(() => {
-    let active = true;
-    let timer: NodeJS.Timeout;
-
-    const initChat = async () => {
-      if (!user) return;
-
-      if (user.admin) {
-          setIsGuideAccepted(false);
-          if (active) {
-            setMessages([
-                { id: Date.now(), text: `Olá Gestor(a) ${user.nome.split(' ')[0]}! Sou a Dora, sua assistente de Ouvidoria.`, sender: "bot" },
-                { 
-                    id: Date.now() + 1, 
-                    text: "Como posso ajudar na gestão hoje?", 
-                    sender: "bot", 
-                    options: ["⏳ Prazos Legais", "🔍 Fluxo de Análise", "📊 Priorização", "📝 Modelos de Resposta"] 
-                }
-            ]);
-          }
+  // 2. FLUXO NORMAL (GUIA vs GESTÃO vs ASSUNTOS)
+  const startNormalFlow = async () => {
+      // MODO GESTÃO
+      if (user?.admin) {
+          setMessages([{ 
+            id: Date.now(), 
+            text: `Olá Gestor ${userName}! Sou a Dora Gestão. Como posso ajudar no monitoramento hoje?`, 
+            sender: "bot", 
+            options: ["⏳ Prazos Legais", "🔍 Fluxo de Análise", "📊 Priorização"] 
+          }]);
           return;
       }
-
-      if (mode === "guide") {
-        setIsGuideAccepted(false);
-        if (active) {
-            setMessages([
-            { id: Date.now(), text: `Olá ${user.nome.split(' ')[0]}! Notei que você vai registrar uma nova manifestação.`, sender: "bot" },
-            { id: Date.now() + 1, text: "Quer que eu te guie explicando as regras da **IN 01/2017**?", sender: "bot", options: ["Sim, me guie", "Não, obrigado"] }
-            ]);
-        }
-        if (!isOpen) {
-            timer = setTimeout(() => { if(active) setIsOpen(true); }, 5000);
-        }
+      // MODO GUIA (Nova Manifestação)
+      if (isNovaManifestacaoPage) {
+        setMessages([{ 
+            id: Date.now(), 
+            text: `Olá ${userName}! Sou a Dora Assistente. Vou te orientar no preenchimento desta manifestação.`, 
+            sender: "bot", 
+            options: ["Sim, me guie", "Não, obrigado"] 
+        }]);
+        return;
       } 
-      else {
-        setIsGuideAccepted(false);
-        if (timer) clearTimeout(timer);
-        const data = await fetchAssuntos();
-        if (active) {
-            setMessages([
-            { id: Date.now(), text: `Olá ${user.nome.split(' ')[0]}! Sou a Dora. Como posso ajudar?`, sender: "bot" },
-            { id: Date.now() + 1, text: data.text, sender: "bot", options: data.options }
-            ]);
-        }
-      }
-    };
-
-    initChat();
-    return () => { active = false; if (timer) clearTimeout(timer); };
-  }, [mode, user]);
-
-  useEffect(() => {
-    if (user?.admin) return; 
-    if (mode !== "guide" || !currentField || !isGuideAccepted) return;
-
-    let guideText = "";
-    switch (currentField) {
-      case "anonimo": guideText = "🕵️ **Anonimato (Art. 14)**: Permitido apenas para Denúncias e Reclamações."; break;
-      case "classificacao": guideText = "🗂️ **Classificação**: Escolha corretamente entre Reclamação, Denúncia, Elogio, Sugestão ou Solicitação."; break;
-      case "assunto": guideText = "📌 **Assunto**: A escolha correta garante o direcionamento rápido."; break;
-      case "descricao": guideText = "📝 **Descrição**: Seja detalhista (Onde, Quando, Quem)."; break;
-      case "arquivos": guideText = "📎 **Anexos**: Fotos e documentos ajudam muito."; break;
-    }
-
-    if (guideText) {
-      setMessages(prev => {
-        if (prev[prev.length - 1]?.text === guideText) return prev;
-        return [...prev, { id: Date.now(), text: guideText, sender: "bot" }];
-      });
-    }
-  }, [currentField, mode, isGuideAccepted, user]); 
-
-  // --- HANDLERS ---
-  const handleAdminOption = (option: string) => {
-      let responseText = "";
-      switch(option) {
-          case "⏳ Prazos Legais": responseText = "🕒 **Prazos (Lei 13.460/2017):**\n\n• **Resposta:** 30 dias.\n• **Prorrogação:** +30 dias.\n• **Total Máximo:** 60 dias."; break;
-          case "🔍 Fluxo de Análise": responseText = "1. **Triagem:** Competência do órgão?\n2. **Análise:** Precisa de área técnica?\n3. **Resposta:** Linguagem clara e cidadã."; break;
-          case "📊 Priorização": responseText = "⚠️ **Priorize:**\nManifestações Pendentes antigas e Denúncias graves."; break;
-          case "📝 Modelos de Resposta": responseText = "Padronize: *\"Prezado(a), informamos que sua solicitação foi atendida conforme processo nº...\"*"; break;
-          default: responseText = "Desculpe, não tenho informações sobre esse tópico.";
-      }
-      setMessages(prev => [...prev, { id: Date.now(), text: option, sender: "user" }, { id: Date.now() + 1, text: responseText, sender: "bot", options: ["Voltar ao Menu"] }]);
+      // MODO ASSUNTOS (Home)
+      const data = await fetchAssuntos();
+      setMessages([{ id: Date.now(), text: `Olá ${userName}! Sou a Dora Assistente. Como posso ajudar hoje?`, sender: "bot", options: data.options }]);
   };
 
+  useEffect(() => { 
+    if (user && !hasAutoOpenedRef.current) startNormalFlow(); 
+  }, [user, location]);
+
+  // 3. DICAS NO CLIQUE DOS CAMPOS (ABRE E MOSTRA)
+  useEffect(() => {
+    if (user?.admin || !currentField || !isNovaManifestacaoPage) return;
+    let guideText = "";
+    switch (currentField) {
+      case "anonimo": guideText = "🕵️ **Anonimato**: Seus dados ficam em sigilo total."; break;
+      case "classificacao": guideText = "🗂️ **Classificação**: Escolha o tipo (Denúncia, Reclamação, etc)."; break;
+      case "assunto": guideText = "📌 **Assunto**: Selecione o tema principal."; break;
+      case "descricao": guideText = "📝 **Descrição**: Detalhe o ocorrido com clareza."; break;
+      case "arquivos": guideText = "📎 **Anexos**: Envie fotos ou documentos como prova."; break;
+    }
+    if (guideText) {
+      setMessages(prev => [...prev, { id: Date.now(), text: guideText, sender: "bot" }]);
+      setIsOpen(true);
+    }
+  }, [currentField, isNovaManifestacaoPage]);
+
   const handleBadgeClick = (optionName: string) => {
-    if (user?.admin) {
-        if (optionName === "Voltar ao Menu") {
-            setMessages(prev => [...prev, { id: Date.now(), text: "Voltar", sender: "user" }, { id: Date.now()+1, text: "Menu Principal:", sender: "bot", options: ["⏳ Prazos Legais", "🔍 Fluxo de Análise", "📊 Priorização", "📝 Modelos de Resposta"] }]);
-            return;
-        }
-        handleAdminOption(optionName);
+    if (["Entendido", "Não, obrigado", "Cancelar", "Voltar"].includes(optionName)) {
+        setIsOpen(false);
+        if (optionName === "Entendido") startNormalFlow(); // Carrega o menu após fechar a notificação
         return;
     }
 
+    // TRAVA GESTÃO: Não abre manifestação para ADMIN
+    if (optionName === "Sim, iniciar") {
+        if (user?.admin) return;
+        setIsOpen(false);
+        const url = pendingAssuntoId ? `/nova-manifestacao?assunto_id=${pendingAssuntoId}` : "/nova-manifestacao";
+        setLocation(url);
+        return;
+    }
+
+    if (user?.admin) {
+        const adminResponses: Record<string, string> = {
+            "⏳ Prazos Legais": "Os prazos seguem a Lei 13.460/2017: 30 dias para resposta, prorrogáveis por mais 30.",
+            "🔍 Fluxo de Análise": "O fluxo consiste em: Triagem -> Encaminhamento -> Análise -> Resposta Final.",
+            "📊 Priorização": "Priorizamos Denúncias Graves e prazos críticos."
+        };
+        setMessages(prev => [...prev, { id: Date.now(), text: optionName, sender: "user" }, { id: Date.now() + 1, text: adminResponses[optionName] || "Como ajudo?", sender: "bot", options: ["Voltar"] }]);
+        return;
+    }
+
+    // Fluxo Cidadão
     const userMsg: Message = { id: Date.now(), text: optionName, sender: "user" };
     setMessages(prev => [...prev, userMsg]);
     setIsLoading(true);
-
     const assunto = assuntosCache.find(a => a.nome === optionName);
-    if (assunto) {
-        setPendingAssuntoId(String(assunto.id));
-    }
-    
+    if (assunto) setPendingAssuntoId(String(assunto.id));
+
     setTimeout(() => {
-        const botText = assunto?.descricao 
-            ? `📌 **${optionName}**: ${assunto.descricao}` 
-            : `Você escolheu **${optionName}**.`;
-            
-        setMessages(prev => [
-            ...prev, 
-            { id: Date.now() + 1, text: botText, sender: "bot" },
-            { id: Date.now() + 2, text: "Deseja registrar uma manifestação sobre isso?", sender: "bot", options: ["Sim, criar nova", "Não, ver outros"] }
-        ]);
+        setMessages(prev => [...prev, { id: Date.now(), text: `Deseja iniciar um registro sobre **${optionName}**?`, sender: "bot", options: ["Sim, iniciar", "Cancelar"] }]);
         setIsLoading(false);
     }, 600);
   };
 
-  const handleSend = async (manualText?: string) => {
-    const text = manualText || inputValue;
-    if (!text.trim()) return;
-
-    if (text === "Sim, me guie") {
-        setIsGuideAccepted(true);
-        setMessages(p => [...p, { id: Date.now(), text, sender: "user" }, { id: Date.now()+1, text: "Combinado! Vou te acompanhar.", sender: "bot" }]);
-        return;
-    }
-    if (text === "Não, obrigado") {
-        setIsGuideAccepted(false);
-        setMessages(p => [...p, { id: Date.now(), text, sender: "user" }, { id: Date.now()+1, text: "Ok. Se precisar, chame.", sender: "bot" }]);
-        return;
-    }
-
-    if (text === "Sim, criar nova") {
-        setMessages(p => [...p, { id: Date.now(), text, sender: "user" }]);
-        let url = "/nova-manifestacao";
-        if (pendingAssuntoId) {
-            url += `?assunto_id=${pendingAssuntoId}`;
-            setPendingAssuntoId(null);
-        }
-        setLocation(url);
-        setIsOpen(false);
-        return;
-    }
-
-    if (text === "Não, ver outros") {
-        setPendingAssuntoId(null);
-        handleClear();
-        return;
-    }
-
-    setMessages(p => [...p, { id: Date.now(), text, sender: "user" }]);
-    setInputValue("");
-    setIsLoading(true);
-    
-    setTimeout(async () => {
-        let response = "Não entendi. Pode reformular?";
-        let opts: string[] | undefined = undefined;
-
-        if (user?.admin) {
-             response = "Sou focada em gestão. Selecione uma opção:";
-             opts = ["⏳ Prazos Legais", "🔍 Fluxo de Análise", "📊 Priorização"];
-        } else {
-            if (text.toLowerCase().includes("ajuda") || text.toLowerCase().includes("ola")) {
-                 const data = await fetchAssuntos();
-                 response = "Posso te ajudar a escolher o assunto:";
-                 opts = data.options;
-            } else {
-                 response = "Ainda estou aprendendo. Tente escolher um dos assuntos abaixo:";
-                 const data = await fetchAssuntos();
-                 opts = data.options;
-            }
-        }
-        
-        setMessages(p => [...p, { id: Date.now()+1, text: response, sender: "bot", options: opts }]);
-        setIsLoading(false);
-    }, 800);
-  };
-
-  const handleClear = async () => {
-    setIsLoading(true);
-    setPendingAssuntoId(null);
-    if (user?.admin) {
-        setMessages([{ id: 1, text: `Olá Gestor(a)! Menu de Gestão:`, sender: "bot", options: ["⏳ Prazos Legais", "🔍 Fluxo de Análise", "📊 Priorização", "📝 Modelos de Resposta"] }]);
-    } else if (mode === "guide") {
-        setMessages([{ id: 1, text: "Reiniciando guia...", sender: "bot", options: ["Sim, me guie", "Não, obrigado"] }]);
-        setIsGuideAccepted(false);
-    } else {
-        const data = await fetchAssuntos();
-        setMessages([{ id: 1, text: `Olá ${user?.nome.split(' ')[0]}! Como posso ajudar?`, sender: "bot" }, { id: 2, text: data.text, sender: "bot", options: data.options }]);
-    }
-    setIsLoading(false);
-  };
-
   useEffect(() => {
-    if (scrollRef.current) {
-        setTimeout(() => { scrollRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, 150);
-    }
-  }, [messages, isOpen]);
+    if (scrollRef.current) scrollRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [messages]);
 
-  const rotasEscondidas = ["/login", "/cadastro", "/esqueci-senha", "/redefinir-senha"];
-  if (rotasEscondidas.includes(location)) return null;
+  if (["/login", "/cadastro"].includes(location)) return null;
 
   return (
     <>
@@ -317,58 +175,38 @@ export default function ChatbotAssistente() {
         <Bot size={28} />
       </Button>
 
-      <div className={cn("fixed bottom-20 right-4 z-40 w-[90vw] md:w-96 bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-300 font-sans", isOpen ? "scale-100 opacity-100 translate-y-0 h-[550px]" : "scale-90 opacity-0 translate-y-10 h-0 pointer-events-none")}>
-        
-        <div className="bg-primary p-4 flex justify-between items-center text-primary-foreground">
+      <div className={cn(
+        "fixed bottom-20 right-4 z-50 w-[92vw] md:w-96 bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-300 h-[320px]", 
+        !isOpen && "scale-90 opacity-0 pointer-events-none h-0"
+      )}>
+        <div className="bg-primary p-3 flex justify-between items-center text-primary-foreground shrink-0">
           <div className="flex gap-2 items-center">
-              <div className="bg-white/20 p-1.5 rounded-full">
-                  {user?.admin ? <ShieldCheck size={20} /> : <Bot size={20} />}
-              </div>
-              <div>
-                  <h3 className="font-bold text-sm">Dora - {user?.admin ? "Gestão" : (mode === "guide" ? "Modo Guia" : "Assistente")}</h3>
-                  <p className="text-xs opacity-80">Online</p>
-              </div>
+            <Bot size={20} className="text-white" />
+            <h3 className="font-bold text-sm text-white">Dora - {user?.admin ? "Gestão" : "Assistente"}</h3>
           </div>
-          <div className="flex gap-1">
-            <Button variant="ghost" size="icon" onClick={handleClear} className="hover:bg-white/20 rounded-full"><Trash2 size={18}/></Button>
-            <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="hover:bg-white/20 rounded-full"><X size={18}/></Button>
-          </div>
+          <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="h-8 w-8 text-white hover:bg-white/20"><X size={18}/></Button>
         </div>
 
-        <ScrollArea className="flex-1 bg-muted/30 p-4 min-h-0">
-          <div className="space-y-4 pb-2">
-            {messages.map(msg => (
-              <div key={msg.id} className={cn("flex flex-col w-full animate-in slide-in-from-bottom-2", msg.sender === "user" ? "items-end" : "items-start")}>
-                <div className={cn("max-w-[85%] p-3 rounded-2xl text-sm shadow-sm whitespace-pre-wrap", 
-                    msg.sender === "user" 
-                        ? "bg-primary text-primary-foreground rounded-tr-none"
-                        : "bg-card text-card-foreground border rounded-tl-none"
-                )}>
-                  {renderFormattedText(msg.text)}
-                </div>
-                {msg.options && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {msg.options.map((opt, i) => (
-                      <button 
-                        key={i} 
-                        onClick={() => ["Sim, me guie", "Não, obrigado", "Sim, criar nova", "Não, ver outros", "Voltar ao Menu"].includes(opt) ? handleSend(opt) : handleBadgeClick(opt)} 
-                        className="text-xs px-3 py-1.5 rounded-full transition-colors border font-medium bg-primary/10 text-primary border-primary/20 hover:bg-primary hover:text-primary-foreground"
-                      >
-                        {opt}
-                      </button>
-                    ))}
+        <div className="flex-1 overflow-hidden relative bg-muted/10">
+            <ScrollArea className="h-full w-full p-3">
+              <div className="flex flex-col gap-3 pb-4">
+                {messages.map(msg => (
+                  <div key={msg.id} className={cn("flex flex-col", msg.sender === "user" ? "items-end" : "items-start")}>
+                    <div className={cn("max-w-[85%] p-2.5 rounded-2xl text-xs border shadow-sm", msg.sender === "user" ? "bg-primary text-primary-foreground rounded-tr-none" : "bg-card rounded-tl-none border-border/50")}>
+                      {renderFormattedText(msg.text)}
+                    </div>
+                    {msg.options && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {msg.options.map((opt, i) => (
+                          <button key={i} onClick={() => handleBadgeClick(opt)} className="text-[10px] px-3 py-1.5 rounded-full border bg-background hover:bg-primary hover:text-primary-foreground transition-all shadow-sm font-medium border-primary/20">{opt}</button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
+                ))}
+                <div ref={scrollRef} />
               </div>
-            ))}
-            {isLoading && <div className="text-xs text-muted-foreground animate-pulse pl-2">Dora está digitando...</div>}
-            <div ref={scrollRef} className="h-1 w-full" />
-          </div>
-        </ScrollArea>
-
-        <div className="p-3 bg-card border-t flex gap-2">
-          <Input placeholder="Digite..." value={inputValue} onChange={e => setInputValue(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSend()} className="bg-background" />
-          <Button size="icon" onClick={() => handleSend()}><Send size={18} /></Button>
+            </ScrollArea>
         </div>
       </div>
     </>

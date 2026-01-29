@@ -7,7 +7,6 @@ import AcessibilidadeMenu from "./AcessibilidadeMenu";
 import ChatbotAssistente from "./ChatbotAssistente";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api"; 
-import { toast } from "sonner"; // OBRIGATÓRIO: Importar o toast
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
@@ -18,13 +17,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
-  // Guarda o último número para saber se aumentou
   const lastCountRef = useRef(0);
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
-  // Fecha menus ao clicar fora
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
@@ -47,54 +44,26 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       setIsMobileMenuOpen(false);
   }, [location]);
 
-  // =========================================================
-  // LÓGICA DO SININHO (15 SEGUNDOS)
-  // =========================================================
+  // --- POLLING SILENCIOSO (Layout apenas atualiza o número) ---
   useEffect(() => {
-    // Função para tocar som (opcional)
-    const playNotificationSound = () => {
-        try {
-            const audio = new Audio('/notification.mp3'); // Se tiver um arquivo, ou remove essa linha
-            // Como fallback, apenas loga
-            console.log("🔔 Trim trim!"); 
-        } catch (e) { }
-    };
-
     const fetchNotificacoes = async () => {
         if (!isAuthenticated) return;
         try {
-            // Timestamp para evitar cache
             const response = await api.get(`/movimentacoes/notificacoes/novas?t=${Date.now()}`);
             const novas = response.data.novas || 0;
             const itens = response.data.itens || [];
 
-            // SE TIVER NOVAS E FOR MAIOR QUE ANTES -> AVISA!
-            if (novas > 0 && novas > lastCountRef.current) {
-                // Toca alerta visual (Toast Azul)
-                toast.info(`🔔 Você tem ${novas} nova(s) notificação(ões)!`, {
-                    description: "Clique no sino para visualizar.",
-                    duration: 6000, // Fica 6 segundos
-                    action: {
-                        label: "Ver",
-                        onClick: () => setShowNotifMenu(true)
-                    }
-                });
-                playNotificationSound();
-            }
-            
-            // Atualiza a referência e o estado
             lastCountRef.current = novas;
             setNotificacoesCount(novas);
             setNotificacoesList(itens);
-
         } catch (error) {
             console.error("Erro polling layout:", error);
         }
     };
 
     if (isAuthenticated) {
-        fetchNotificacoes(); // Busca ao carregar a página
-        const interval = setInterval(fetchNotificacoes, 15000); // Repete a cada 15s
+        fetchNotificacoes();
+        const interval = setInterval(fetchNotificacoes, 15000);
         return () => clearInterval(interval);
     }
   }, [isAuthenticated]); 
@@ -141,7 +110,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const showChatbot = !!user;
 
-  // --- RENDER DO SINO ---
+  // --- RENDER DO SINO (DESKTOP E DENTRO DO MENU MOBILE) ---
   const NotificationBell = ({ isMobile = false }) => (
     <div className={cn("relative", isMobile ? "w-full flex justify-end" : "")} ref={notifRef}>
         <button 
@@ -246,12 +215,20 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 )}
             </div>
 
+            {/* --- BOTÃO MENU MOBILE COM BOLINHA VERMELHA --- */}
             <button
                 id="mobile-menu-toggle"
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="md:hidden p-2 text-muted-foreground hover:bg-muted rounded-full outline-none"
+                className="md:hidden relative p-2 text-muted-foreground hover:bg-muted rounded-full outline-none"
             >
                 {isMobileMenuOpen ? <X size={24} /> : <MoreVertical size={24} />}
+                
+                {/* AQUI ESTÁ A MÁGICA: Se tiver notificações, mostra a bolinha nos 3 pontinhos */}
+                {!isMobileMenuOpen && notificacoesCount > 0 && (
+                     <span className="absolute top-1 right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white shadow-sm ring-1 ring-background animate-in zoom-in duration-300">
+                        {notificacoesCount}
+                     </span>
+                )}
             </button>
 
             {isMobileMenuOpen && (
