@@ -2,8 +2,8 @@
 module.exports = {
   darkMode: ["class"],
   content: [
-    "./client/index.html",              // <--- Mudou aqui
-    "./client/src/**/*.{ts,tsx,js,jsx}" // <--- Mudou aqui
+    "./client/index.html",              
+    "./client/src/**/*.{ts,tsx,js,jsx}" 
   ],
   theme: {
     // ... Mantenha o resto do seu tema (cores, extend, etc) igual ...

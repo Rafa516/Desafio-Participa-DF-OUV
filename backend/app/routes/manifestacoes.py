@@ -98,28 +98,19 @@ def criar_manifestacao(
 
 
 # ==============================================================================
-# ROTA: LISTAR MANIFESTAÇÕES (GET) - AGORA SEGURA
+# ROTA: LISTAR MANIFESTAÇÕES (GET)
 # ==============================================================================
 @router.get("/", response_model=ManifestacaoListResponse)
 def listar_manifestacoes(
     skip: int = Query(0),
     limit: int = Query(10),
     db: Session = Depends(get_db),
-    # ADICIONADO: Pega usuário logado para filtrar
     current_user = Depends(get_current_user) 
 ):
-    """
-    Lista manifestações. 
-    - Se for ADMIN: Vê tudo (ou poderia filtrar se quisesse).
-    - Se for COMUM: Vê apenas as suas.
-    """
-    
-    # Define o filtro: Se NÃO for admin, filtra pelo ID do usuário atual
     filtro_usuario_id = None
     if not current_user.admin:
         filtro_usuario_id = str(current_user.id)
 
-    # Passa o filtro para o Service
     lista, total = ManifestacaoService.listar_manifestacoes(
         db, skip, limit, usuario_id=filtro_usuario_id
     )
@@ -139,9 +130,9 @@ def listar_manifestacoes(
 def consultar_manifestacao(
     protocolo: str, 
     db: Session = Depends(get_db),
-    # Opcional: Adicionar segurança aqui também para usuário não ver protocolo alheio
-    # mas protocolo geralmente é "chave pública" para consulta.
 ):
+    # O Pydantic (ManifestacaoResponse) agora tem o campo 'usuario'
+    # Como o SQLAlchemy carrega as relações, o Pydantic vai ler e preencher automaticamente.
     manifestacao = ManifestacaoService.obter_manifestacao(db, protocolo)
     if not manifestacao:
         raise HTTPException(status_code=404, detail="Manifestação não encontrada")
@@ -160,7 +151,6 @@ def listar_todas_admin(
     if not current_user.admin:
         raise HTTPException(status_code=403, detail="Acesso restrito.")
 
-    # Chama o service SEM passar ID (usuario_id=None), trazendo tudo
     lista, total = ManifestacaoService.listar_manifestacoes(db, skip, limit)
     
     return {

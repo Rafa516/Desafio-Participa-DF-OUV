@@ -10,10 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/contexts/AuthContext";
 import { 
   ArrowLeft, Calendar, FileText, Paperclip, 
-  MapPin, Clock, CheckCircle2, AlertCircle, 
+  Clock, CheckCircle2, AlertCircle, 
   Download, File as FileIcon, Tag,
-  FileImage, FileVideo, FileAudio,
-  MessageSquare, ShieldCheck, Lock, UserCircle2
+  FileVideo, FileAudio,
+  MessageSquare, ShieldCheck, Lock, UserCircle2, Mail, Phone, Fingerprint, MapPin
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -26,7 +26,6 @@ const formatDate = (dateString: string) => {
   });
 };
 
-// CORREÇÃO: Normaliza tudo para MINÚSCULO para evitar erro com o Backend
 const getStatusStep = (status: string) => {
   const s = status?.toLowerCase() || "";
   const steps = ["pendente", "recebida", "em_processamento", "concluida"];
@@ -34,7 +33,6 @@ const getStatusStep = (status: string) => {
   return steps.indexOf(s);
 };
 
-// CORREÇÃO: Cores baseadas em chaves minúsculas
 const getStatusColor = (status: string) => {
   const s = status?.toLowerCase() || "";
   switch (s) {
@@ -47,7 +45,6 @@ const getStatusColor = (status: string) => {
   }
 };
 
-// CORREÇÃO: Mapa visual com chaves minúsculas
 const formatStatus = (status: string) => {
   const s = status?.toLowerCase() || "";
   const map: Record<string, string> = {
@@ -79,6 +76,29 @@ export default function DetalhesManifestacao() {
     if (params?.protocolo) loadData(params.protocolo);
   }, [params?.protocolo]);
 
+  // --- FUNÇÃO PARA ATUALIZAR STATUS AUTOMATICAMENTE ---
+  const autoReceberManifestacao = async (id: string, currentStatus: string) => {
+      if (user?.admin && currentStatus === 'pendente') {
+          try {
+              const formData = new FormData();
+              formData.append("texto", "Manifestação recebida automaticamente pelo sistema para análise.");
+              formData.append("interno", "true");
+              formData.append("novo_status", "recebida");
+
+              const token = localStorage.getItem("token");
+              await api.post(`/movimentacoes/${id}`, formData, {
+                  headers: { "Authorization": `Bearer ${token}` }
+              });
+              const data = await manifestacaoService.consultarPorProtocolo(params?.protocolo || "");
+              setManifestacao(data);
+              setAdminStatus("recebida");
+              toast.info("Protocolo marcado como RECEBIDO automaticamente.");
+          } catch (e) {
+              console.error("Erro ao auto-receber", e);
+          }
+      }
+  };
+
   const loadData = async (protocolo: string) => {
     try {
       setLoading(true);
@@ -86,8 +106,8 @@ export default function DetalhesManifestacao() {
       setManifestacao(data);
       
       if(data) {
-          // CORREÇÃO: Converte para minúsculo ao carregar para garantir compatibilidade
-          setAdminStatus(data.status?.toLowerCase()); 
+          const statusLower = data.status?.toLowerCase();
+          setAdminStatus(statusLower); 
           
           try {
             const token = localStorage.getItem("token");
@@ -97,6 +117,10 @@ export default function DetalhesManifestacao() {
             setHistorico(resHist.data);
           } catch (err) {
             console.error("Erro ao carregar histórico", err);
+          }
+
+          if (user?.admin && statusLower === 'pendente') {
+             await autoReceberManifestacao(data.id, statusLower);
           }
       }
     } catch (error) {
@@ -118,10 +142,9 @@ export default function DetalhesManifestacao() {
         formData.append("texto", adminTexto);
         formData.append("interno", String(adminInterno));
         
-        // CORREÇÃO: Compara e envia sempre em minúsculo
         const currentStatusLower = manifestacao.status?.toLowerCase();
         if (adminStatus && adminStatus !== currentStatusLower) {
-            formData.append("novo_status", adminStatus); // Já está minúsculo vindo do Select
+            formData.append("novo_status", adminStatus); 
         }
 
         const token = localStorage.getItem("token");
@@ -141,6 +164,34 @@ export default function DetalhesManifestacao() {
     } finally {
         setSendingMov(false);
     }
+  };
+
+  // --- LÓGICA DE OPÇÕES DO SELECT (REGRAS DE NEGÓCIO) ---
+  const getAvailableStatuses = () => {
+      if (!manifestacao) return [];
+      const current = manifestacao.status?.toLowerCase();
+
+      if (current === 'pendente') {
+          return [
+              { value: 'recebida', label: 'Recebida (Iniciar Triagem)' },
+              { value: 'rejeitada', label: 'Rejeitada (Encerrar)' }
+          ];
+      }
+      
+      if (current === 'recebida') {
+          return [
+              { value: 'em_processamento', label: 'Em Análise (Encaminhar)' },
+              { value: 'rejeitada', label: 'Rejeitada (Encerrar)' }
+          ];
+      }
+
+      if (current === 'em_processamento') {
+          return [
+              { value: 'concluida', label: 'Concluída (Finalizar)' }
+          ];
+      }
+
+      return [];
   };
 
   const renderFileIcon = (mimeType: string, url: string) => {
@@ -167,6 +218,8 @@ export default function DetalhesManifestacao() {
   if (!manifestacao) return null;
 
   const currentStep = getStatusStep(manifestacao.status);
+  const showManifestanteData = user?.admin && !manifestacao.anonimo && manifestacao.usuario;
+  const statusOptions = getAvailableStatuses();
 
   return (
     <div className="w-full flex flex-col gap-6 animate-in fade-in duration-500 h-[calc(100vh-2rem)] md:h-[calc(100vh-3rem)]">
@@ -187,7 +240,10 @@ export default function DetalhesManifestacao() {
                 {formatStatus(manifestacao.status)}
               </span>
             </div>
-            <p className="text-muted-foreground font-mono text-sm mt-1">#{manifestacao.protocolo}</p>
+            {/* PROTOCOLO AJUSTADO PARA 2XL */}
+            <p className="text-foreground font-mono text-1xl font-bold mt-2 tracking-tight">
+                #{manifestacao.protocolo}
+            </p>
           </div>
         </div>
       </div>
@@ -195,10 +251,10 @@ export default function DetalhesManifestacao() {
       <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-10">
           
-          {/* COLUNA ESQUERDA (Dados + Histórico) */}
+          {/* === COLUNA PRINCIPAL (ESQUERDA) === */}
           <div className="lg:col-span-2 space-y-8">
             
-            {/* TIMELINE VISUAL */}
+            {/* 1. TIMELINE VISUAL */}
             <div className="bg-card p-6 rounded-3xl border border-border shadow-sm">
               <h3 className="font-semibold text-foreground mb-8 flex items-center gap-2">
                 <Clock className="w-5 h-5 text-primary" />
@@ -224,18 +280,84 @@ export default function DetalhesManifestacao() {
               </div>
             </div>
 
-            {/* RELATO ORIGINAL */}
+            {/* 2. ÁREA SUPERIOR: DADOS E INFORMAÇÕES (LAYOUT AJUSTÁVEL) */}
+            <div className={showManifestanteData ? "grid grid-cols-1 md:grid-cols-2 gap-6" : "grid grid-cols-1 gap-6"}>
+                
+                {/* --- DADOS DO MANIFESTANTE (SÓ APARECE SE VISÍVEL) --- */}
+                {showManifestanteData && (
+                    <div className="bg-card p-6 rounded-3xl border border-border shadow-sm flex flex-col h-full">
+                        <h3 className="font-semibold text-foreground border-b border-border pb-3 mb-4 flex items-center gap-2">
+                            <UserCircle2 className="w-5 h-5 text-primary" />
+                            Dados do Manifestante
+                        </h3>
+                        <div className="space-y-5 flex-1">
+                            <div className="flex flex-col">
+                                <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Nome Completo</span>
+                                <span className="text-sm font-medium text-foreground">{manifestacao.usuario?.nome}</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">CPF</span>
+                                    <span className="text-sm font-medium text-foreground">{manifestacao.usuario?.cpf || "-"}</span>
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Telefone</span>
+                                    <span className="text-sm font-medium text-foreground">{manifestacao.usuario?.telefone || "-"}</span>
+                                </div>
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">E-mail</span>
+                                <span className="text-sm font-medium text-foreground break-all">{manifestacao.usuario?.email}</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* --- INFORMAÇÕES GERAIS --- */}
+                <div className="bg-card p-6 rounded-3xl border border-border shadow-sm flex flex-col h-full">
+                    <h3 className="font-semibold text-foreground border-b border-border pb-3 mb-4 flex items-center gap-2">
+                        <Tag className="w-5 h-5 text-primary" />
+                        Informações Gerais
+                    </h3>
+                    <div className="space-y-6 flex-1">
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Assunto Principal</label>
+                            <p className="text-lg font-medium text-foreground leading-tight">{manifestacao.assunto?.nome || "Não informado"}</p>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Classificação</label>
+                                <span className="text-sm text-foreground capitalize font-medium px-2 py-1 bg-muted rounded-md w-fit">
+                                    {manifestacao.classificacao?.toLowerCase()}
+                                </span>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Abertura</label>
+                                <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                                    <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                                    {formatDate(manifestacao.data_criacao.toString())}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* 3. RELATO ORIGINAL */}
             <div className="bg-card p-8 rounded-3xl border border-border shadow-sm space-y-4">
               <div className="flex items-center gap-2 mb-2">
                 <FileText className="w-5 h-5 text-primary" />
-                <h3 className="font-semibold text-foreground text-lg">Relato do Cidadão</h3>
+               <h3 className="font-semibold text-foreground text-lg">
+                {user?.admin ? "Relato do Cidadão" : "Relato"}
+              </h3>
               </div>
               <div className="p-6 bg-muted/30 rounded-2xl border border-border text-foreground leading-relaxed whitespace-pre-wrap font-sans text-base">
                 {manifestacao.relato}
               </div>
             </div>
 
-            {/* ANEXOS */}
+            {/* 4. ANEXOS */}
             {manifestacao.anexos && manifestacao.anexos.length > 0 && (
               <div className="bg-card p-8 rounded-3xl border border-border shadow-sm space-y-4">
                 <div className="flex items-center gap-2 mb-4">
@@ -265,7 +387,7 @@ export default function DetalhesManifestacao() {
               </div>
             )}
 
-            {/* HISTÓRICO DE TRAMITAÇÃO */}
+            {/* 5. HISTÓRICO */}
             <div className="bg-card p-8 rounded-3xl border border-border shadow-sm space-y-6">
                 <div className="flex items-center gap-2 mb-4 border-b border-border pb-4">
                     <MessageSquare className="w-5 h-5 text-primary" />
@@ -308,10 +430,10 @@ export default function DetalhesManifestacao() {
 
           </div>
 
-          {/* COLUNA DIREITA (Info + Painel Admin) */}
+          {/* === COLUNA LATERAL (DIREITA) === */}
           <div className="space-y-6">
             
-            {/* --- PAINEL DO ADMINISTRADOR --- */}
+            {/* PAINEL DO ADMINISTRADOR (REGRAS APLICADAS) */}
             {user?.admin && (
                 <div className="bg-primary/5 p-6 rounded-3xl border border-primary/20 shadow-sm space-y-6 animate-in slide-in-from-right-4">
                     <h3 className="font-bold text-primary border-b border-primary/20 pb-3 flex items-center gap-2">
@@ -319,20 +441,21 @@ export default function DetalhesManifestacao() {
                         Área do Ouvidor
                     </h3>
                     
-                    {/* DROP DOWN AGORA COM VALORES EM MINÚSCULO  */}
                     <div className="space-y-3">
-                        <Label>Tramitação (Alterar Status)</Label>
+                        <Label>Tramitação (Próxima Fase)</Label>
                         <Select value={adminStatus} onValueChange={setAdminStatus}>
-                            {/* ADICIONADO w-full AQUI 👇 */}
                             <SelectTrigger className="w-full bg-background border-primary/20">
                                 <SelectValue placeholder="Selecione..." />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="pendente">Pendente</SelectItem>
-                                <SelectItem value="recebida">Recebida</SelectItem>
-                                <SelectItem value="em_processamento">Em Análise</SelectItem>
-                                <SelectItem value="concluida">Concluída</SelectItem>
-                                <SelectItem value="rejeitada">Rejeitada</SelectItem>
+                                {/* Exibe apenas opções válidas conforme a regra de negócio */}
+                                {statusOptions.length > 0 ? (
+                                    statusOptions.map(opt => (
+                                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                    ))
+                                ) : (
+                                    <SelectItem value="disabled" disabled>Nenhuma ação disponível</SelectItem>
+                                )}
                             </SelectContent>
                         </Select>
                     </div>
@@ -355,33 +478,28 @@ export default function DetalhesManifestacao() {
                         <Switch checked={adminInterno} onCheckedChange={setAdminInterno} />
                     </div>
 
-                    <Button onClick={handleAdminAction} disabled={sendingMov} className="w-full font-bold shadow-md">
+                    <Button onClick={handleAdminAction} disabled={sendingMov || statusOptions.length === 0} className="w-full font-bold shadow-md">
                         {sendingMov ? "Processando..." : "Registrar Movimentação"}
                     </Button>
                 </div>
             )}
-            {/* ----------------------------------------------- */}
 
-            <div className="bg-card p-6 rounded-3xl border border-border shadow-sm space-y-6">
-              <h3 className="font-semibold text-foreground border-b border-border pb-3">Informações Gerais</h3>
-              <div className="space-y-5">
-                <div><label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Assunto</label><p className="text-lg font-medium text-foreground flex items-center gap-2 mt-1">{manifestacao.assunto?.nome || "Não informado"}</p></div>
-                <div><label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Tipo</label><div className="flex items-center gap-2 mt-1"><Tag className="w-4 h-4 text-primary" /><span className="text-base text-foreground capitalize">{manifestacao.classificacao?.toLowerCase()}</span></div></div>
-                <div><label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Data</label><p className="text-base text-foreground mt-1 flex items-center gap-2"><Calendar className="w-4 h-4 text-muted-foreground" />{formatDate(manifestacao.data_criacao.toString())}</p></div>
-              </div>
-            </div>
-
+            {/* DADOS ESPECÍFICOS (VOLTOU PARA O CANTO DIREITO) */}
             {manifestacao.dados_complementares && Object.keys(manifestacao.dados_complementares).length > 0 && (
               <div className="bg-card p-6 rounded-3xl border border-border shadow-sm space-y-4">
-                <h3 className="font-semibold text-foreground border-b border-border pb-3 flex items-center gap-2"><MapPin className="w-4 h-4 text-muted-foreground" /> Dados Específicos</h3>
-                <div className="space-y-4">
+                <h3 className="font-semibold text-foreground border-b border-border pb-3 flex items-center gap-2"><MapPin className="w-4 h-4 text-primary" /> Dados Específicos</h3>
+                <div className="space-y-5">
                   {Object.entries(manifestacao.dados_complementares).map(([key, value]) => (
-                    <div key={key} className="flex flex-col"><span className="text-xs font-bold text-muted-foreground uppercase break-words tracking-wider">{key.replace(/_/g, " ")}</span><span className="text-sm text-foreground font-medium break-words mt-1">{String(value)}</span></div>
+                    <div key={key} className="flex flex-col">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase break-words tracking-wider">{key.replace(/_/g, " ")}</span>
+                        <span className="text-sm text-foreground font-medium break-words mt-1 bg-muted/50 p-2 rounded-lg border border-border/50">{String(value)}</span>
+                    </div>
                   ))}
                 </div>
               </div>
             )}
 
+            {/* AVISO DE PRIVACIDADE */}
             <div className="bg-blue-500/10 p-6 rounded-3xl border border-blue-500/20 flex gap-4 items-start">
               <AlertCircle className="w-6 h-6 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
               <div className="space-y-1">

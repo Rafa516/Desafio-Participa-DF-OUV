@@ -1,8 +1,8 @@
 import { jsxLocPlugin } from "@builder.io/vite-plugin-jsx-loc";
 import react from "@vitejs/plugin-react";
-import path from "node:path"; // <--- Faltava importar
-import { defineConfig } from "vite"; // <--- Faltava importar
-import { VitePWA } from "vite-plugin-pwa"; // <--- Faltava importar (O erro era aqui)
+import path from "node:path"; 
+import { defineConfig } from "vite"; 
+import { VitePWA } from "vite-plugin-pwa"; 
 
 // SEM O IMPORT DO TAILWIND AQUI (Isso está correto, removemos o plugin da v4)
 

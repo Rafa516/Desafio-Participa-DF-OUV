@@ -24,6 +24,12 @@ export default function ChatbotAssistente() {
   const [isLoading, setIsLoading] = useState(false);
   const [assuntosCache, setAssuntosCache] = useState<any[]>([]);
   const [isGuideAccepted, setIsGuideAccepted] = useState(false);
+  
+  const [pendingAssuntoId, setPendingAssuntoId] = useState<string | null>(null);
+
+  // REF para controlar se já avisamos sobre as notificações atuais
+  // Isso evita que a Dora fique repetindo a mesma mensagem a cada 10s
+  const lastNotifCountRef = useRef(0);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
@@ -39,9 +45,17 @@ export default function ChatbotAssistente() {
   const fetchAssuntos = async () => {
     if (assuntosCache.length > 0) return { text: "Assuntos disponíveis:", options: assuntosCache.map(a => a.nome) };
     try {
-      const response = await api.get("/assuntos/");
-      const dados = response.data.assuntos || response.data;
-      if (Array.isArray(dados) && dados.length > 0) {
+      const response = await api.get("/assuntos/?apenas_ativos=true");
+      let dados = [];
+      if (response.data && Array.isArray(response.data.assuntos)) {
+          dados = response.data.assuntos;
+      } else if (Array.isArray(response.data)) {
+          dados = response.data;
+      } else if (response.data && Array.isArray(response.data.data)) {
+          dados = response.data.data;
+      }
+
+      if (dados.length > 0) {
         setAssuntosCache(dados);
         return { text: "Assuntos disponíveis:", options: dados.map((a: any) => a.nome) };
       }
@@ -50,17 +64,56 @@ export default function ChatbotAssistente() {
   };
 
   // ==========================================================================
-  // EFEITO 1: INICIALIZAÇÃO BLINDADA (CIDADÃO vs ADMIN)
+  // LÓGICA DE NOTIFICAÇÃO DA DORA (10 SEGUNDOS)
   // ==========================================================================
   useEffect(() => {
-    let active = true; // Impede sobreposição de estados (Race Condition)
+    if (!user) return;
+
+    const checarNotificacoes = async () => {
+        try {
+            // Timestamp evita cache
+            const res = await api.get(`/movimentacoes/notificacoes/novas?t=${Date.now()}`);
+            const totalNovas = res.data.novas || 0;
+
+            // Só avisa se o número de notificações AUMENTOU em relação ao último check
+            // E se tiver pelo menos 1
+            if (totalNovas > lastNotifCountRef.current && totalNovas > 0) {
+                setMessages(prev => [
+                    ...prev, 
+                    { 
+                        id: Date.now(), 
+                        text: `🔔 **Psiu!** Tem novidade no sino.\nVocê tem **${totalNovas}** notificação(ões) pendente(s).`, 
+                        sender: "bot" 
+                    }
+                ]);
+                
+                // Opcional: Se quiser que o chat abra sozinho quando chegar notificação, descomente:
+                // setIsOpen(true); 
+            }
+
+            // Atualiza a referência para o próximo ciclo
+            lastNotifCountRef.current = totalNovas;
+
+        } catch (err) {
+            console.error("Dora falhou ao checar notificações", err);
+        }
+    };
+
+    // Roda a cada 10 segundos
+    const interval = setInterval(checarNotificacoes, 10000);
+    return () => clearInterval(interval);
+
+  }, [user, setIsOpen]); 
+  // ==========================================================================
+
+
+  useEffect(() => {
+    let active = true;
     let timer: NodeJS.Timeout;
 
     const initChat = async () => {
-      // Se não tem usuário ainda, não faz nada (espera carregar)
       if (!user) return;
 
-      // --- CENÁRIO 1: MODO ADMIN (Gestão) ---
       if (user.admin) {
           setIsGuideAccepted(false);
           if (active) {
@@ -77,7 +130,6 @@ export default function ChatbotAssistente() {
           return;
       }
 
-      // --- CENÁRIO 2: MODO CIDADÃO - GUIA ---
       if (mode === "guide") {
         setIsGuideAccepted(false);
         if (active) {
@@ -86,16 +138,13 @@ export default function ChatbotAssistente() {
             { id: Date.now() + 1, text: "Quer que eu te guie explicando as regras da **IN 01/2017**?", sender: "bot", options: ["Sim, me guie", "Não, obrigado"] }
             ]);
         }
-
         if (!isOpen) {
             timer = setTimeout(() => { if(active) setIsOpen(true); }, 5000);
         }
       } 
-      // --- CENÁRIO 3: MODO CIDADÃO - GLOBAL ---
       else {
         setIsGuideAccepted(false);
         if (timer) clearTimeout(timer);
-
         const data = await fetchAssuntos();
         if (active) {
             setMessages([
@@ -107,18 +156,11 @@ export default function ChatbotAssistente() {
     };
 
     initChat();
+    return () => { active = false; if (timer) clearTimeout(timer); };
+  }, [mode, user]);
 
-    return () => { 
-        active = false; // Cancela atualizações se o usuário mudar (ex: logar como admin)
-        if (timer) clearTimeout(timer); 
-    };
-  }, [mode, user]); // Recarrega se o usuário mudar
-
-  // ==========================================================================
-  // EFEITO 2: REAÇÃO AOS CAMPOS (Só para Cidadão no modo Guia)
-  // ==========================================================================
   useEffect(() => {
-    if (user?.admin) return; // Admin não precisa de guia
+    if (user?.admin) return; 
     if (mode !== "guide" || !currentField || !isGuideAccepted) return;
 
     let guideText = "";
@@ -138,40 +180,20 @@ export default function ChatbotAssistente() {
     }
   }, [currentField, mode, isGuideAccepted, user]); 
 
-  // ==========================================================================
-  // HANDLERS
-  // ==========================================================================
-  
-  // --- LÓGICA DO ADMIN ---
+  // --- HANDLERS ---
   const handleAdminOption = (option: string) => {
       let responseText = "";
-      
       switch(option) {
-          case "⏳ Prazos Legais":
-              responseText = "🕒 **Prazos (Lei 13.460/2017):**\n\n• **Resposta:** 30 dias.\n• **Prorrogação:** +30 dias.\n• **Total Máximo:** 60 dias.";
-              break;
-          case "🔍 Fluxo de Análise":
-              responseText = "1. **Triagem:** Competência do órgão?\n2. **Análise:** Precisa de área técnica?\n3. **Resposta:** Linguagem clara e cidadã.";
-              break;
-          case "📊 Priorização":
-              responseText = "⚠️ **Priorize:**\nManifestações Pendentes antigas e Denúncias graves.";
-              break;
-          case "📝 Modelos de Resposta":
-              responseText = "Padronize: *\"Prezado(a), informamos que sua solicitação foi atendida conforme processo nº...\"*";
-              break;
-          default:
-              responseText = "Desculpe, não tenho informações sobre esse tópico.";
+          case "⏳ Prazos Legais": responseText = "🕒 **Prazos (Lei 13.460/2017):**\n\n• **Resposta:** 30 dias.\n• **Prorrogação:** +30 dias.\n• **Total Máximo:** 60 dias."; break;
+          case "🔍 Fluxo de Análise": responseText = "1. **Triagem:** Competência do órgão?\n2. **Análise:** Precisa de área técnica?\n3. **Resposta:** Linguagem clara e cidadã."; break;
+          case "📊 Priorização": responseText = "⚠️ **Priorize:**\nManifestações Pendentes antigas e Denúncias graves."; break;
+          case "📝 Modelos de Resposta": responseText = "Padronize: *\"Prezado(a), informamos que sua solicitação foi atendida conforme processo nº...\"*"; break;
+          default: responseText = "Desculpe, não tenho informações sobre esse tópico.";
       }
-
-      setMessages(prev => [
-          ...prev,
-          { id: Date.now(), text: option, sender: "user" },
-          { id: Date.now() + 1, text: responseText, sender: "bot", options: ["Voltar ao Menu"] }
-      ]);
+      setMessages(prev => [...prev, { id: Date.now(), text: option, sender: "user" }, { id: Date.now() + 1, text: responseText, sender: "bot", options: ["Voltar ao Menu"] }]);
   };
 
   const handleBadgeClick = (optionName: string) => {
-    // Se for Admin, usa lógica de Admin
     if (user?.admin) {
         if (optionName === "Voltar ao Menu") {
             setMessages(prev => [...prev, { id: Date.now(), text: "Voltar", sender: "user" }, { id: Date.now()+1, text: "Menu Principal:", sender: "bot", options: ["⏳ Prazos Legais", "🔍 Fluxo de Análise", "📊 Priorização", "📝 Modelos de Resposta"] }]);
@@ -181,12 +203,14 @@ export default function ChatbotAssistente() {
         return;
     }
 
-    // Se for Cidadão
     const userMsg: Message = { id: Date.now(), text: optionName, sender: "user" };
     setMessages(prev => [...prev, userMsg]);
     setIsLoading(true);
 
     const assunto = assuntosCache.find(a => a.nome === optionName);
+    if (assunto) {
+        setPendingAssuntoId(String(assunto.id));
+    }
     
     setTimeout(() => {
         const botText = assunto?.descricao 
@@ -196,7 +220,7 @@ export default function ChatbotAssistente() {
         setMessages(prev => [
             ...prev, 
             { id: Date.now() + 1, text: botText, sender: "bot" },
-            { id: Date.now() + 2, text: "Ir para o formulário?", sender: "bot", options: ["Sim, criar nova", "Não, ver outros"] }
+            { id: Date.now() + 2, text: "Deseja registrar uma manifestação sobre isso?", sender: "bot", options: ["Sim, criar nova", "Não, ver outros"] }
         ]);
         setIsLoading(false);
     }, 600);
@@ -206,7 +230,6 @@ export default function ChatbotAssistente() {
     const text = manualText || inputValue;
     if (!text.trim()) return;
 
-    // Comandos de navegação rápida
     if (text === "Sim, me guie") {
         setIsGuideAccepted(true);
         setMessages(p => [...p, { id: Date.now(), text, sender: "user" }, { id: Date.now()+1, text: "Combinado! Vou te acompanhar.", sender: "bot" }]);
@@ -217,12 +240,21 @@ export default function ChatbotAssistente() {
         setMessages(p => [...p, { id: Date.now(), text, sender: "user" }, { id: Date.now()+1, text: "Ok. Se precisar, chame.", sender: "bot" }]);
         return;
     }
+
     if (text === "Sim, criar nova") {
         setMessages(p => [...p, { id: Date.now(), text, sender: "user" }]);
-        setLocation("/nova-manifestacao");
+        let url = "/nova-manifestacao";
+        if (pendingAssuntoId) {
+            url += `?assunto_id=${pendingAssuntoId}`;
+            setPendingAssuntoId(null);
+        }
+        setLocation(url);
+        setIsOpen(false);
         return;
     }
+
     if (text === "Não, ver outros") {
+        setPendingAssuntoId(null);
         handleClear();
         return;
     }
@@ -239,7 +271,6 @@ export default function ChatbotAssistente() {
              response = "Sou focada em gestão. Selecione uma opção:";
              opts = ["⏳ Prazos Legais", "🔍 Fluxo de Análise", "📊 Priorização"];
         } else {
-            // Lógica simples de resposta para cidadão
             if (text.toLowerCase().includes("ajuda") || text.toLowerCase().includes("ola")) {
                  const data = await fetchAssuntos();
                  response = "Posso te ajudar a escolher o assunto:";
@@ -258,6 +289,7 @@ export default function ChatbotAssistente() {
 
   const handleClear = async () => {
     setIsLoading(true);
+    setPendingAssuntoId(null);
     if (user?.admin) {
         setMessages([{ id: 1, text: `Olá Gestor(a)! Menu de Gestão:`, sender: "bot", options: ["⏳ Prazos Legais", "🔍 Fluxo de Análise", "📊 Priorização", "📝 Modelos de Resposta"] }]);
     } else if (mode === "guide") {
@@ -287,11 +319,9 @@ export default function ChatbotAssistente() {
 
       <div className={cn("fixed bottom-20 right-4 z-40 w-[90vw] md:w-96 bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-300 font-sans", isOpen ? "scale-100 opacity-100 translate-y-0 h-[550px]" : "scale-90 opacity-0 translate-y-10 h-0 pointer-events-none")}>
         
-        {/* CORREÇÃO DO LAYOUT: Mantendo o padrão Azul (Primary) para Admin também */}
         <div className="bg-primary p-4 flex justify-between items-center text-primary-foreground">
           <div className="flex gap-2 items-center">
               <div className="bg-white/20 p-1.5 rounded-full">
-                  {/* Ícone Diferente para Admin para identificar, mas cor igual */}
                   {user?.admin ? <ShieldCheck size={20} /> : <Bot size={20} />}
               </div>
               <div>
@@ -311,8 +341,8 @@ export default function ChatbotAssistente() {
               <div key={msg.id} className={cn("flex flex-col w-full animate-in slide-in-from-bottom-2", msg.sender === "user" ? "items-end" : "items-start")}>
                 <div className={cn("max-w-[85%] p-3 rounded-2xl text-sm shadow-sm whitespace-pre-wrap", 
                     msg.sender === "user" 
-                        ? "bg-primary text-primary-foreground rounded-tr-none" // Usuário sempre Azul
-                        : "bg-card text-card-foreground border rounded-tl-none" // Dora sempre branca/card
+                        ? "bg-primary text-primary-foreground rounded-tr-none"
+                        : "bg-card text-card-foreground border rounded-tl-none"
                 )}>
                   {renderFormattedText(msg.text)}
                 </div>

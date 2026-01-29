@@ -65,9 +65,6 @@ class ManifestacaoUpdate(BaseModel):
 # ==============================================================================
 
 class AnexoResponse(BaseModel):
-    """
-    Schema para formatar a SAÍDA dos dados de Anexos
-    """
     id: str
     arquivo_url: str
     tipo_arquivo: str
@@ -77,11 +74,21 @@ class AnexoResponse(BaseModel):
     class Config:
         from_attributes = True
 
-# Schema simples para exibir o Assunto dentro da Manifestação
 class AssuntoSimplesResponse(BaseModel):
     id: str
     nome: str
     
+    class Config:
+        from_attributes = True
+
+# --- Schema para devolver dados do Cidadão ---
+class UsuarioInfo(BaseModel):
+    id: str
+    nome: str
+    email: str
+    cpf: Optional[str]
+    telefone: Optional[str]
+
     class Config:
         from_attributes = True
 
@@ -94,8 +101,10 @@ class ManifestacaoResponse(BaseModel):
     relato: str
     assunto_id: str
     
-    # Objeto Assunto completo (aninhado) para exibir o nome no Front
     assunto: Optional[AssuntoSimplesResponse] = None 
+    
+    #  Campo usuário incluído na resposta ---
+    usuario: Optional[UsuarioInfo] = None
 
     classificacao: ClassificacaoManifestacaoSchema
     dados_complementares: Optional[Dict[str, Any]]
@@ -104,7 +113,6 @@ class ManifestacaoResponse(BaseModel):
     data_criacao: datetime
     data_atualizacao: Optional[datetime]
     
-    # Lista de anexos aninhada na resposta
     anexos: List[AnexoResponse] = []
 
     class Config:

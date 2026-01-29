@@ -4,8 +4,8 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import { AuthProvider } from "./contexts/AuthContext";
-// --- 1. IMPORTAR O CONTEXTO DO CHAT ---
+
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ChatProvider } from "./contexts/ChatContext"; 
 
 import Layout from "./components/Layout";
@@ -19,30 +19,40 @@ import MinhasManifestacoes from "./pages/MinhasManifestacoes";
 import DetalhesManifestacao from "./pages/DetalhesManifestacao";
 import MeuPerfil from "./pages/MeuPerfil";
 import NovaManifestacao from "./pages/NovaManifestacao"; 
+import GerenciarAssuntos from "@/pages/admin/GerenciarAssuntos";
+import TodasManifestacoes from "@/pages/admin/TodasManifestacoes";
 
-// --- 2. IMPORTAR A DORA ---
 import ChatbotAssistente from "./components/ChatbotAssistente";
 
 function Router() {
+  const { user } = useAuth();
+
   return (
     <Layout>
       <Switch>
-        {/* Rota Pública */}
         <Route path="/" component={Home} />
-
-        {/* Rotas de Autenticação */}
         <Route path="/login" component={Login} />
         <Route path="/cadastro" component={Register} />
         <Route path="/esqueci-senha" component={ForgotPassword} />
         <Route path="/redefinir-senha" component={ResetPassword} />
 
-        {/* --- ROTAS PROTEGIDAS --- */}
+        {user?.admin ? (
+           <Route path="/manifestacoes">
+             <ProtectedRoute>
+               <TodasManifestacoes />
+             </ProtectedRoute>
+           </Route>
+        ) : (
+           <Route path="/manifestacoes">
+             <ProtectedRoute>
+               <MinhasManifestacoes />
+             </ProtectedRoute>
+           </Route>
+        )}
 
-        <Route path="/manifestacoes">
-          <ProtectedRoute>
-            <MinhasManifestacoes />
-          </ProtectedRoute>
-        </Route>
+        {user?.admin && (
+          <Route path="/admin/assuntos" component={GerenciarAssuntos} />
+        )}
 
         <Route path="/manifestacao/:protocolo">
           <ProtectedRoute>
@@ -74,16 +84,32 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
         <AuthProvider>
-          {/* 3. ENVOLVER A APLICAÇÃO COM O CHATPROVIDER */}
           <ChatProvider>
             <TooltipProvider>
-              <Toaster position="top-center" />
-              
+             
+              <Toaster 
+                position="top-center" 
+                toastOptions={{
+                  style: { 
+                    marginTop: '50px', // 
+                    zIndex: 99999,     //
+                  },
+                  classNames: {
+                    // Força o fundo azul e texto branco
+                    toast: "!bg-blue-600 !text-white !border-blue-500 shadow-xl font-semibold",
+                    title: "!text-white",
+                    description: "!text-blue-100",
+                    actionButton: "!bg-white !text-blue-600",
+                    cancelButton: "!bg-blue-700 !text-white",
+                    error: "!bg-red-600 !text-white !border-red-500", // Mantém erro vermelho
+                    success: "!bg-green-600 !text-white !border-green-500", // Mantém sucesso verde
+                    warning: "!bg-amber-500 !text-white !border-amber-400", // Mantém aviso amarelo
+                    info: "!bg-blue-600 !text-white !border-blue-500" // Info azul
+                  }
+                }}
+              />
               <Router />
-              
-              {/* 4. A DORA FICA AQUI (Global para todo o app) */}
               <ChatbotAssistente />
-              
             </TooltipProvider>
           </ChatProvider>
         </AuthProvider>

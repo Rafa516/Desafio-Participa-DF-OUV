@@ -17,7 +17,7 @@ from app.models.usuario import Base as UsuarioBase
 from app.models.assunto import Base as AssuntoBase
 from app.models.anexo import Base as AnexoBase
 from app.models.movimentacao import Base as MovimentacaoBase
-from app.routes import health, assuntos, manifestacoes, protocolos, auth, movimentacoes
+from app.routes import health, assuntos, manifestacoes, protocolos, auth, movimentacoes,transcricao
 import logging
 
 from app.config import settings
@@ -84,6 +84,8 @@ app.include_router(assuntos.router)
 app.include_router(manifestacoes.router)
 app.include_router(protocolos.router) 
 app.include_router(movimentacoes.router)
+app.include_router(transcricao.router)
+
 
 
 @app.get("/", include_in_schema=False)
