@@ -488,6 +488,12 @@ export default function NovaManifestacao() {
                       <label className="text-xs font-bold text-muted-foreground tracking-wider uppercase">Nome</label>
                       <p className="text-xl font-semibold text-foreground truncate">{formData.anonimo ? "Anônimo" : user?.nome || "Cidadão"}</p>
                   </div>
+                   {!formData.anonimo && (
+                    <div className="space-y-1 relative z-10">
+                        <label className="text-xs font-bold text-muted-foreground tracking-wider uppercase">CPF</label>
+                        <p className="text-lg font-medium text-foreground truncate opacity-90">{user?.cpf || "000.000.000-00"}</p>
+                    </div>
+                  )}
                   {!formData.anonimo && (
                     <div className="space-y-1 relative z-10">
                         <label className="text-xs font-bold text-muted-foreground tracking-wider uppercase">E-mail</label>

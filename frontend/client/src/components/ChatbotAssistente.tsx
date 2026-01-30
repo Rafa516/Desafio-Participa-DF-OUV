@@ -140,24 +140,41 @@ export default function ChatbotAssistente() {
 
     let guideText = "";
     const tips: Record<string, string> = {
-        "step1_inicio": "📜 **Dica Legal (IN 01/2017):**\n\n• **Denúncia/Reclamação:** Se quiser sigilo, ative o modo Anônimo.\n• **Solicitação:** Para pedir serviços (tapa-buraco, poda).\n• **Elogio:** Para reconhecer um bom serviço.",
-        "step2_Servidor Público": "📝 **Servidor Público:**\nRelate a conduta (incompetência, negligência). Se souber, informe o nome do servidor e horário aproximado.",
-        "step2_Serviço Público": "📝 **Serviço Público:**\nDescreva a falha no atendimento. Foi demora? Falta de informação? Seja detalhista.",
-        "step2_Educação": "📝 **Educação:**\nInforme qual escola/creche e o problema (infraestrutura, falta de professor).",
-        "step2_Saúde": "📝 **Saúde:**\nInforme o nome do Hospital/UBS. O problema foi falta de médico? Remédio? Atendimento?",
-        "step2_Segurança Pública": "📝 **Segurança:**\nCite a corporação (PMDF/PCDF) e o local exato da ocorrência.",
-        "step2_Infraestrutura e Mobilidade": "📝 **Infraestrutura:**\nPara buracos ou iluminação, pontos de referência ajudam muito a equipe a localizar.",
-        "step2_generico": "📝 **Descrição:**\nSeja claro e objetivo (O Que, Quando, Onde e Quem). Isso agiliza a análise.",
-        "step3_Servidor Público": "📌 **Campos Necessários:**\nInforme o **Nome do Servidor** e o **Órgão** onde ele atua. Isso é vital para a apuração.",
-        "step3_Serviço Público": "📌 **Campos Necessários:**\nInforme o **Nome do Serviço** e o **Órgão Responsável**.",
-        "step3_Educação": "📌 **Campos Necessários:**\nPrecisamos do nome da **Instituição de Ensino** e o **Nível** (Infantil, Fundamental, etc).",
-        "step3_Saúde": "📌 **Campos Necessários:**\nIndique o **Estabelecimento de Saúde** e o **Tipo de Problema** (Medicamento, Atendimento).",
-        "step3_Segurança Pública": "📌 **Campos Necessários:**\nSelecione o **Órgão** (PMDF, Bombeiros) e o **Local do Fato**.",
-        "step3_Infraestrutura e Mobilidade": "📌 **Campos Necessários:**\nInforme o **Endereço/Local** exato e o tipo (Rua, Estacionamento).",
-        "step3_Meio Ambiente": "📌 **Campos Necessários:**\nIndique o **Local** e se é Poluição ou Descarte irregular.",
-        "step3_generico": "📌 **Dados Extras:**\nPreencha os campos complementares para ajudar na identificação do problema.",
-        "step4_arquivos": "📎 **Provas (Art. 11):**\nFotos e vídeos são essenciais para comprovar buracos, infraestrutura ou situações visíveis.",
-        "step5_confirmacao": "✅ **Quase lá!**\nConfira todos os dados. Ao confirmar, um **Protocolo** será gerado para você acompanhar."
+        "step1_inicio": "📜 **Guia da Ouvidoria (Baseado na IN 01/2017):**\n\n• **Identificação vs. Anonimato:**\nPara Solicitação, Elogio, Sugestão e Informação, você precisa se identificar. Seus dados são protegidos pela LGPD (Lei nº 13.709/2018).\nPara Reclamação e Denúncia, o anonimato é uma opção, mas impede o acompanhamento e o recebimento de uma resposta final (Art. 14 da IN 01/2017).\n\n• **Prazos de Resposta:**\nA Ouvidoria tem até **10 dias** para uma análise inicial e até **20 dias** para a resposta conclusiva (Art. 13 da IN 01/2017).\n\n--- \n\n**TIPOS DE MANIFESTAÇÃO:**\n\n• **Solicitação:** Para pedir um serviço público.\nExemplos: Tapa-buraco, poda de árvore, limpeza de bueiro.\n\n• **Elogio:** Para reconhecer um bom serviço ou atendimento.\nImpacto: Seu elogio é registrado na ficha funcional do servidor, valorizando o bom trabalho (Art. 15 da IN 01/2017).\n\n• **Sugestão:** Para propor melhorias nos serviços e políticas públicas.\nExemplos: Nova rota de ônibus, mudança no horário de um posto de saúde.\n\n• **Informação:** Para esclarecer dúvidas sobre a administração pública.\nExemplos: Quais documentos levar para um serviço, como funciona um programa social.\n\n• **Reclamação:** Para relatar insatisfação com um serviço ou atendimento.\nDica: Descreva o problema com o máximo de detalhes: o que, quando, onde e quem estava envolvido. Isso acelera a solução.\n\n• **Denúncia:** Para comunicar um ato ilícito ou irregularidade grave.\nAtenção: Uma denúncia precisa de fatos e, se possível, provas. Aponte indícios de autoria e materialidade (Art. 18 da IN 01/2017). Suas informações são mantidas em sigilo (Art. 17 da IN 01/2017).",
+
+        "step2_generico": "📝 **Como Descrever sua Manifestação:**\nPara que sua solicitação seja atendida rapidamente, seja claro e objetivo. Responda a estas perguntas no seu relato: **O quê? Quando? Onde? e Quem?** Informações precisas são essenciais para a análise.",
+
+        "step2_Servidor Público": "📝 **Relatando sobre um Servidor:**\nDescreva a conduta do servidor que você presenciou (ex: negligência, grosseria, demora injustificada). Se possível, informe o nome do servidor, o órgão, o local e o horário aproximado do fato. Isso é crucial para a apuração.",
+
+        "step2_Serviço Público": "📝 **Relatando sobre um Serviço:**\nDetalhe a falha no serviço público. Foi demora no atendimento? Falta de informação? Qualidade ruim do serviço prestado? Forneça o máximo de detalhes para que a área responsável possa entender e corrigir o problema.",
+
+        "step2_Educação": "📝 **Relatando sobre Educação:**\nEspecifique o nome da escola, creche ou coordenação regional de ensino. Descreva o problema detalhadamente: é falta de professores, um problema de infraestrutura (telhado, banheiro), falta de merenda?",
+
+        "step2_Saúde": "📝 **Relatando sobre Saúde:**\nInforme o nome do Hospital, UPA, UBS ou centro de saúde. O problema foi a falta de médicos, demora para ser atendido, falta de medicamentos ou algum equipamento quebrado? Detalhes ajudam a direcionar a solução.",
+
+        "step2_Segurança Pública": "📝 **Relatando sobre Segurança:**\nIdentifique a corporação (PMDF, PCDF, Bombeiros) e o local exato da ocorrência. Se for uma denúncia sobre a conduta de um agente, tente descrever a situação, viatura e outros elementos que ajudem na identificação.",
+
+        "step2_Infraestrutura e Mobilidade": "📝 **Relatando sobre Infraestrutura:**\nPara problemas como buracos na via, iluminação pública queimada ou sinalização danificada, forneça o endereço exato ou pontos de referência claros. Um link do Google Maps ou o CEP ajudam a equipe a encontrar o local rapidamente.",
+
+        "step3_generico": "📌 **Preenchendo os Dados da Ocorrência:**\nEstes campos são fundamentais para que a área técnica possa identificar o problema e iniciar a apuração. Informações precisas e completas agilizam todo o processo.",
+
+        "step3_Servidor Público": "📌 **Campos Essenciais - Servidor:**\nO **Nome do Servidor** e o **Órgão** onde ele trabalha são obrigatórios para que a Corregedoria possa iniciar a apuração da conduta. Sem esses dados, a manifestação pode ser arquivada.",
+
+        "step3_Serviço Público": "📌 **Campos Essenciais - Serviço:**\nO **Nome do Serviço** (ex: 'Emissão de RG') e o **Órgão Responsável** (ex: 'Polícia Civil') são necessários para que a reclamação seja encaminhada para a equipe certa.",
+
+        "step3_Educação": "📌 **Campos Essenciais - Educação:**\nO nome da **Instituição de Ensino** e o **Nível** (Infantil, Fundamental, Médio) direcionam a demanda para a área correta da Secretaria de Educação.",
+
+        "step3_Saúde": "📌 **Campos Essenciais - Saúde:**\nIndicar o **Estabelecimento de Saúde** (ex: 'Hospital de Base') e o **Tipo de Problema** (ex: 'Demora na emergência') é vital para que a gestão do hospital ou da secretaria possa atuar.",
+
+        "step3_Segurança Pública": "📌 **Campos Essenciais - Segurança:**\nSelecionar o **Órgão** (PMDF, CBMDF, PCDF) e informar o **Endereço do Fato** são informações mínimas para o registro e encaminhamento da ocorrência.",
+
+        "step3_Infraestrutura e Mobilidade": "📌 **Campos Essenciais - Infraestrutura:**\nO **Endereço/Local** exato é crucial. Para buracos, informe a rua, quadra e um ponto de referência. Para iluminação, o número do poste (se visível) ajuda muito.",
+
+        "step3_Meio Ambiente": "📌 **Campos Essenciais - Meio Ambiente:**\nIndique o **Local** da ocorrência (ex: 'Parque da Cidade') e o **Tipo de Problema** (ex: 'Descarte irregular de lixo', 'Poluição de córrego') para que a fiscalização ambiental seja acionada.",
+
+        "step4_arquivos": "📎 **Anexar Provas é Fundamental (Art. 18 da IN 01/2017):**\nEm casos de **Denúncia** ou **Reclamação**, fotos, vídeos, documentos ou qualquer outro tipo de arquivo são essenciais para comprovar os fatos. Anexos fortalecem sua manifestação e fornecem a materialidade necessária para a apuração.",
+
+        "step5_confirmacao": "✅ **Revise Antes de Enviar!**\nConfira todos os dados informados. Lembre-se que prestar informação falsa é crime (Art. 299 do Código Penal). Ao confirmar, seu **Protocolo** será gerado. Guarde este número para acompanhar o andamento da sua manifestação no site da Ouvidoria."
     };
 
     guideText = tips[currentField] || tips[`step${currentField.charAt(4)}_generico`] || "";
