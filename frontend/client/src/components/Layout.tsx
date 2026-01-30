@@ -7,7 +7,7 @@ import AcessibilidadeMenu from "./AcessibilidadeMenu";
 import ChatbotAssistente from "./ChatbotAssistente";
 import { useAuth } from "@/contexts/AuthContext";
 import { api } from "@/lib/api"; 
-import { toast } from "sonner"; // OBRIGATÓRIO: Importar o toast
+import { toast } from "sonner";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
@@ -18,13 +18,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
-  // Guarda o último número para saber se aumentou
   const lastCountRef = useRef(0);
+  const isFirstLoadRef = useRef(true);
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
-  // Fecha menus ao clicar fora
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
@@ -47,42 +46,40 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       setIsMobileMenuOpen(false);
   }, [location]);
 
-  // =========================================================
-  // LÓGICA DO SININHO (15 SEGUNDOS)
-  // =========================================================
   useEffect(() => {
-    // Função para tocar som (opcional)
-    const playNotificationSound = () => {
-        try {
-            const audio = new Audio('/notification.mp3'); // Se tiver um arquivo, ou remove essa linha
-            // Como fallback, apenas loga
-            console.log("🔔 Trim trim!"); 
-        } catch (e) { }
-    };
+    if (!isAuthenticated) {
+        sessionStorage.removeItem("dora_auto_opened");
+        isFirstLoadRef.current = true; 
+    }
+  }, [isAuthenticated]);
 
+  useEffect(() => {
     const fetchNotificacoes = async () => {
         if (!isAuthenticated) return;
         try {
-            // Timestamp para evitar cache
             const response = await api.get(`/movimentacoes/notificacoes/novas?t=${Date.now()}`);
             const novas = response.data.novas || 0;
             const itens = response.data.itens || [];
 
-            // SE TIVER NOVAS E FOR MAIOR QUE ANTES -> AVISA!
+            if (isFirstLoadRef.current) {
+                lastCountRef.current = novas;
+                setNotificacoesCount(novas);
+                setNotificacoesList(itens);
+                isFirstLoadRef.current = false; 
+                return;
+            }
+
             if (novas > 0 && novas > lastCountRef.current) {
-                // Toca alerta visual (Toast Azul)
                 toast.info(`🔔 Você tem ${novas} nova(s) notificação(ões)!`, {
                     description: "Clique no sino para visualizar.",
-                    duration: 6000, // Fica 6 segundos
+                    duration: 6000,
                     action: {
                         label: "Ver",
                         onClick: () => setShowNotifMenu(true)
                     }
                 });
-                playNotificationSound();
             }
             
-            // Atualiza a referência e o estado
             lastCountRef.current = novas;
             setNotificacoesCount(novas);
             setNotificacoesList(itens);
@@ -93,8 +90,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     };
 
     if (isAuthenticated) {
-        fetchNotificacoes(); // Busca ao carregar a página
-        const interval = setInterval(fetchNotificacoes, 15000); // Repete a cada 15s
+        fetchNotificacoes();
+        const interval = setInterval(fetchNotificacoes, 15000); 
         return () => clearInterval(interval);
     }
   }, [isAuthenticated]); 
@@ -110,7 +107,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
   };
 
-  if (["/login", "/cadastro", "/esqueci-senha", "/redefinir-senha"].includes(location)) {
+  if (["/", "/login", "/cadastro", "/esqueci-senha", "/redefinir-senha"].includes(location)) {
     return (
       <main className="min-h-screen bg-background font-sans text-foreground relative">
         <div className="absolute top-4 right-4 z-50">
@@ -122,7 +119,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }
 
   const allNavItems = [
-    { icon: Home, label: "Início", path: "/" },
+    { icon: Home, label: "Início", path: "/inicio" },
    { 
       icon: List, 
       label: user?.admin ? "Painel Ouvidoria" : "Minhas Manifestações", 
@@ -141,12 +138,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const showChatbot = !!user;
 
-  // --- RENDER DO SINO ---
   const NotificationBell = ({ isMobile = false }) => (
     <div className={cn("relative", isMobile ? "w-full flex justify-end" : "")} ref={notifRef}>
         <button 
             onClick={(e) => { e.stopPropagation(); setShowNotifMenu(!showNotifMenu); }}
-            className="relative p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full transition-all outline-none"
+            className="relative p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full transition-all outline-none flex items-center justify-center w-10 h-10"
         >
             <Bell size={isMobile ? 18 : 20} className={notificacoesCount > 0 ? "text-primary animate-pulse" : ""} />
             {notificacoesCount > 0 && (
@@ -249,9 +245,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <button
                 id="mobile-menu-toggle"
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="md:hidden p-2 text-muted-foreground hover:bg-muted rounded-full outline-none"
+                className="md:hidden relative p-2 text-muted-foreground hover:bg-muted rounded-full outline-none"
             >
                 {isMobileMenuOpen ? <X size={24} /> : <MoreVertical size={24} />}
+                
+                {notificacoesCount > 0 && !isMobileMenuOpen && (
+                   <span className="absolute top-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-sm ring-2 ring-background animate-pulse">
+                     {notificacoesCount}
+                   </span>
+                )}
             </button>
 
             {isMobileMenuOpen && (
@@ -283,8 +285,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                              onClick={logout}
                              className="flex items-center justify-between w-full h-9 px-3 text-destructive hover:bg-destructive/10 transition-colors text-sm font-medium"
                            >
-                             <span>Sair da conta</span>
-                             <LogOut size={18} />
+                             <span className="flex-1 text-left">Sair da conta</span>
+                             <div className="w-10 h-10 flex items-center justify-center">
+                                <LogOut size={18} />
+                             </div>
                            </button>
                         </>
                     )}
@@ -321,13 +325,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               );
             })}
           </nav>
-          <div className="mt-auto p-6 border-t border-border">
-            <p className="text-xs text-muted-foreground text-center">© 2026 Desafio ParticipaDF<br/>Governo do Distrito Federal</p>
-          </div>
         </aside>
 
-        <main id="main-content" className="flex-1 overflow-y-auto p-6 pb-24 md:p-10 relative w-full">
-          <div className="max-w-6xl mx-auto">
+        <main id="main-content" className="flex-1 overflow-y-auto p-6 pb-24 md:p-10 relative w-full flex flex-col">
+          <div className="max-w-6xl mx-auto flex-1 w-full">
             {children}
           </div>
         </main>
@@ -335,7 +336,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {showChatbot && <ChatbotAssistente />}
       
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card dark:bg-zinc-900 border-t border-border pb-safe z-50 transition-colors duration-300">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card dark:bg-zinc-900 border-t border-border pb-safe z-[100] transition-colors duration-300">
         <div className="flex justify-around items-center h-16 px-1">
           {navItems.map((item) => {
             const isActive = location === item.path;

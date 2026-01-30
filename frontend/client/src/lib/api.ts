@@ -2,43 +2,32 @@ import axios from "axios";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 
-// --- INSTÂNCIA CORRIGIDA ---
 export const api = axios.create({
   baseURL: API_URL,
-
 });
 
-// --- INTERCEPTOR DE REQUISIÇÃO ---
-// Antes de qualquer requisição sair do front-end, este código é executado.
 api.interceptors.request.use((config) => {
-  // 1. Tenta recuperar o token salvo no navegador
   const token = localStorage.getItem("token");
-  
-  // 2. Se o token existir, adiciona no cabeçalho "Authorization"
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
-// --- INTERCEPTOR DE RESPOSTA ---
-// Toda vez que o back-end responde, este código verifica se houve erro.
+// --- CORREÇÃO: REDIRECIONAMENTO 401 ---
 api.interceptors.response.use(
-  (response) => response, // Se deu certo, só passa pra frente
+  (response) => response,
   (error) => {
-    // Se o erro for 401 (Não Autorizado), significa que o token venceu ou é inválido
     if (error.response?.status === 401) {
-      console.warn("Sessão expirada ou token inválido.");
-      // Aqui poderíamos forçar um logout automático se quiséssemos:
-      // localStorage.removeItem("token");
-      // window.location.href = "/login";
+      console.warn("Sessão expirada.");
+      localStorage.removeItem("token");
+      // AGORA VAI PARA /LOGIN
+      window.location.href = "/login";
     }
     return Promise.reject(error);
   }
 );
 
-// --- TIPAGENS (Interfaces Typescript) ---
-// Mantive as interfaces que você já tinha para garantir compatibilidade
 export interface Manifestacao {
   protocolo: string;
   tipo: string;
@@ -49,6 +38,10 @@ export interface Manifestacao {
   created_at: string;
   anexos?: Anexo[];
   movimentacoes?: Movimentacao[];
+  usuario?: { nome: string }; // Adicionado para evitar erro de tipo no Painel Admin
+  assunto?: { nome: string }; // Adicionado para evitar erro de tipo
+  classificacao?: string;     // Adicionado para compatibilidade
+  data_criacao?: string;      // Adicionado para compatibilidade de data
 }
 
 export interface Anexo {

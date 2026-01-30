@@ -456,8 +456,8 @@ sequenceDiagram
 
 ## 7. Estratégia de Deploy
 
-- **Frontend (React)**: Deploy contínuo em uma plataforma de hospedagem estática (Vercel ou Netlify) a partir do repositório Git.
-- **Backend (FastAPI)**: Containerização com Docker e deploy em uma plataforma como serviço (Heroku ou Google Cloud Run).
+- **Frontend (React)**: Deploy contínuo em uma plataforma de hospedagem estática Render a partir do repositório Git.
+- **Backend (FastAPI)**: Containerização com Docker e deploy com o Render.
 - **CI/CD**: Configuração de um pipeline simples com GitHub Actions para automatizar os builds e deploys do frontend e backend a cada `push` na branch principal.
 
 ---

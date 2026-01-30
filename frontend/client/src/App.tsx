@@ -22,7 +22,7 @@ import NovaManifestacao from "./pages/NovaManifestacao";
 import GerenciarAssuntos from "@/pages/admin/GerenciarAssuntos";
 import TodasManifestacoes from "@/pages/admin/TodasManifestacoes";
 
-import ChatbotAssistente from "./components/ChatbotAssistente";
+// REMOVI O IMPORT DO CHATBOT DAQUI POIS ELE JÁ ESTÁ NO LAYOUT
 
 function Router() {
   const { user } = useAuth();
@@ -30,7 +30,10 @@ function Router() {
   return (
     <Layout>
       <Switch>
-        <Route path="/" component={Home} />
+        {/* LOGIN É A HOME (RAIZ) */}
+        <Route path="/" component={Login} />
+        
+        <Route path="/inicio" component={Home} />
         <Route path="/login" component={Login} />
         <Route path="/cadastro" component={Register} />
         <Route path="/esqueci-senha" component={ForgotPassword} />
@@ -91,25 +94,24 @@ function App() {
                 position="top-center" 
                 toastOptions={{
                   style: { 
-                    marginTop: '50px', // 
-                    zIndex: 99999,     //
+                    marginTop: '10px', 
+                    zIndex: 99999,
                   },
                   classNames: {
-                    // Força o fundo azul e texto branco
                     toast: "!bg-blue-600 !text-white !border-blue-500 shadow-xl font-semibold",
                     title: "!text-white",
                     description: "!text-blue-100",
                     actionButton: "!bg-white !text-blue-600",
                     cancelButton: "!bg-blue-700 !text-white",
-                    error: "!bg-red-600 !text-white !border-red-500", // Mantém erro vermelho
-                    success: "!bg-green-600 !text-white !border-green-500", // Mantém sucesso verde
-                    warning: "!bg-amber-500 !text-white !border-amber-400", // Mantém aviso amarelo
-                    info: "!bg-blue-600 !text-white !border-blue-500" // Info azul
+                    error: "!bg-red-600 !text-white !border-red-500",
+                    success: "!bg-green-600 !text-white !border-green-500",
+                    warning: "!bg-amber-500 !text-white !border-amber-400",
+                    info: "!bg-blue-600 !text-white !border-blue-500"
                   }
                 }}
               />
               <Router />
-              <ChatbotAssistente />
+             
             </TooltipProvider>
           </ChatProvider>
         </AuthProvider>

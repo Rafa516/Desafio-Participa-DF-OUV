@@ -6,17 +6,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Progress } from "@/components/ui/progress"; 
+import { Checkbox } from "@/components/ui/checkbox"; 
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { manifestacaoService } from "@/services/manifestacaoService";
 import { useAuth } from "@/contexts/AuthContext"; 
 import { 
   FileImage, FileVideo, FileAudio, FileText, File as FileGeneric, 
-  UploadCloud, XCircle, AlertTriangle, VenetianMask, Save, Mic, MicOff, Loader2 
+  UploadCloud, XCircle, AlertTriangle, VenetianMask, Save, Mic, MicOff, Loader2, ShieldCheck 
 } from "lucide-react";
-import ChatbotAssistente from "@/components/ChatbotAssistente";
 import { useChat } from "@/contexts/ChatContext"; 
-import { api } from "@/lib/api"; // Importação direta da API
+import { api } from "@/lib/api"; 
 
 const MAX_SIZE_MB = 100;
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
@@ -51,24 +51,31 @@ const tiposManifestacao = [
 export default function NovaManifestacao() {
   const [location, setLocation] = useLocation();
   const { user } = useAuth(); 
-  const { setMode, setCurrentField } = useChat();
+  const { setMode, setCurrentField, setIsOpen } = useChat();
   const searchParams = new URLSearchParams(window.location.search);
 
   // Estados do Formulário
   const [step, setStep] = useState(1);
   const [assuntos, setAssuntos] = useState<any[]>([]); 
-  const [assuntosLoading, setAssuntosLoading] = useState(true); // NOVO ESTADO DE LOADING
+  const [assuntosLoading, setAssuntosLoading] = useState(true);
   const [selectedAssunto, setSelectedAssunto] = useState<any>(null); 
   const [dynamicData, setDynamicData] = useState<Record<string, any>>({}); 
   const [isLoading, setIsLoading] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [activeField, setActiveField] = useState<string | null>(null);
 
+  const [termsAccepted, setTermsAccepted] = useState(false);
+
   // --- ESTADOS PARA O RECONHECIMENTO DE VOZ ---
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+
+  // Refs da Dora
+  const doraTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Memória dos passos onde a Dora já abriu automaticamente
+  const stepsVisitedRef = useRef<Set<number>>(new Set());
 
   const totalSize = files.reduce((acc, file) => acc + file.size, 0);
   const progressPercentage = Math.min((totalSize / MAX_SIZE_BYTES) * 100, 100);
@@ -84,36 +91,62 @@ export default function NovaManifestacao() {
     ? tiposManifestacao.filter(t => ['reclamacao', 'denuncia'].includes(t.valor))
     : tiposManifestacao;
 
-  // --- Efeitos ---
+  // --- FIX: RESETAR DORA AO SAIR DA PÁGINA ---
   useEffect(() => {
-    if (formData.anonimo) {
-      const tipoValido = ['reclamacao', 'denuncia'].includes(formData.classificacao);
-      if (!tipoValido) {
-        setFormData(prev => ({ ...prev, classificacao: 'reclamacao' }));
-        toast.info("Tipo alterado para 'Reclamação' conforme regras de anonimato.");
-      }
-    }
-  }, [formData.anonimo]);
-
-  useEffect(() => {
-    setMode("guide");
     return () => {
-        setMode("global");
-        setCurrentField(null);
+        setMode("assistente"); 
+        setIsOpen(false);      
+        setCurrentField(null); 
+        if (doraTimeoutRef.current) clearTimeout(doraTimeoutRef.current);
     };
-  }, [setMode, setCurrentField]);
+  }, []);
 
-  // CARREGAMENTO DE ASSUNTOS CORRIGIDO
+  // --- EFEITO DORA INTELIGENTE (COM CONTEXTO DO ASSUNTO) ---
+  useEffect(() => {
+    if (doraTimeoutRef.current) clearTimeout(doraTimeoutRef.current);
+
+    let contextKey = "";
+    const assuntoNome = selectedAssunto?.nome || "";
+
+    // Aqui geramos chaves inteligentes para a Dora saber o que falar
+    if (step === 1) contextKey = "step1_inicio"; 
+    
+    if (step === 2) {
+       // Se tiver assunto selecionado, manda ele (ex: "step2_Saúde")
+       // Se não, manda genérico
+       contextKey = assuntoNome ? `step2_${assuntoNome}` : "step2_generico";
+    }
+    
+    if (step === 3) {
+       contextKey = assuntoNome ? `step3_${assuntoNome}` : "step3_generico";
+    }
+    
+    if (step === 4) contextKey = "step4_arquivos";      
+    if (step === 5) contextKey = "step5_confirmacao";
+
+    setMode("guide");
+    setCurrentField(contextKey); // Envia a chave composta para o ChatbotAssistente
+    
+    // Lógica de Abertura Única por Passo
+    if (!stepsVisitedRef.current.has(step)) {
+        stepsVisitedRef.current.add(step);
+        if (!isRecording) {
+            setIsOpen(true);
+            doraTimeoutRef.current = setTimeout(() => {
+                setIsOpen(false);
+            }, 15000); 
+        }
+    }
+  }, [step, setMode, setCurrentField, setIsOpen, selectedAssunto]);
+  
+  // --- CARREGAMENTO INICIAL ---
   useEffect(() => {
     const init = async () => {
         try {
             setAssuntosLoading(true);
-            // Chama direto a API para garantir o formato correto
             const res = await api.get("/assuntos/?apenas_ativos=true"); 
             const data = res.data;
-            // Garante que é array, mesmo se vier dentro de { assuntos: [...] }
             const lista = data.assuntos || (Array.isArray(data) ? data : []);
-            
             setAssuntos(lista);
 
             // Recupera Rascunho
@@ -138,7 +171,6 @@ export default function NovaManifestacao() {
             }
         } catch (err) {
             console.error(err);
-            toast.error("Erro ao carregar lista de assuntos.");
         } finally {
             setAssuntosLoading(false);
         }
@@ -166,10 +198,8 @@ export default function NovaManifestacao() {
 
   const handleFocus = (fieldName: string) => {
     setActiveField(fieldName);
-    setCurrentField(fieldName);
   };
 
-  // --- LÓGICA DE VOZ/TRANSCRIÇÃO ---
   const toggleRecording = async () => {
     if (isRecording) {
         mediaRecorderRef.current?.stop();
@@ -193,17 +223,8 @@ export default function NovaManifestacao() {
 
             mediaRecorder.start();
             setIsRecording(true);
-            toast.info("Gravando... Fale pausadamente.");
-        } catch (error: any) {
-            console.error("Erro mic:", error);
-            if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-                toast.error("Nenhum microfone encontrado neste dispositivo.");
-            } else if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-                toast.error("Permissão de microfone negada.");
-            } else {
-                toast.error("Erro ao acessar microfone.");
-            }
-        }
+            toast.info("Gravando...");
+        } catch (error) { toast.error("Erro no microfone."); }
     }
   };
 
@@ -211,27 +232,16 @@ export default function NovaManifestacao() {
       setIsTranscribing(true);
       const formDataAudio = new FormData();
       formDataAudio.append("arquivo", audioBlob, "gravacao.webm");
-
       try {
-          // Tenta enviar para o backend Python (Whisper)
-          const res = await api.post("/transcricao/", formDataAudio, {
-              headers: { "Content-Type": "multipart/form-data" }
-          });
-          
-          const textoTranscrito = res.data.texto;
-          if (textoTranscrito) {
+          const res = await api.post("/transcricao/", formDataAudio, { headers: { "Content-Type": "multipart/form-data" } });
+          const texto = res.data.texto;
+          if (texto) {
               const spacer = (formData.descricao && !formData.descricao.endsWith(' ')) ? ' ' : '';
-              setFormData(prev => ({ ...prev, descricao: prev.descricao + spacer + textoTranscrito }));
-              toast.success("Áudio transcrito!");
-          } else {
-              toast.warning("Não foi possível entender o áudio.");
+              setFormData(prev => ({ ...prev, descricao: prev.descricao + spacer + texto }));
+              toast.success("Transcrito!");
           }
-      } catch (error) {
-          console.error("Erro transcrição:", error);
-          toast.error("Erro ao transcrever. Verifique se o backend está rodando.");
-      } finally {
-          setIsTranscribing(false);
-      }
+      } catch (error) { toast.error("Erro na transcrição."); } 
+      finally { setIsTranscribing(false); }
   };
 
   const handleAssuntoChange = (id: string) => {
@@ -248,7 +258,7 @@ export default function NovaManifestacao() {
       const newFiles = Array.from(e.target.files);
       const newFilesSize = newFiles.reduce((acc, file) => acc + file.size, 0);
       if (totalSize + newFilesSize > MAX_SIZE_BYTES) {
-        toast.error(`Limite de ${MAX_SIZE_MB}MB excedido.`);
+        toast.error(`Limite excedido.`);
         e.target.value = "";
         return;
       }
@@ -298,6 +308,8 @@ export default function NovaManifestacao() {
   };
 
   const handleSubmit = async () => {
+    if (!termsAccepted) return toast.error("Você precisa aceitar a declaração de veracidade.");
+
     setIsLoading(true);
     const data = new FormData();
     data.append("classificacao", formData.classificacao);
@@ -323,8 +335,7 @@ export default function NovaManifestacao() {
 
   return (
     <div className="w-full h-full flex flex-col animate-in slide-in-from-bottom-4 duration-500 relative">
-      <ChatbotAssistente mode="guide" currentField={activeField} />
-
+      
       {/* Wizard */}
       <div className="flex items-center justify-center mb-8 px-4 relative">
         <div className="flex gap-3">
@@ -338,9 +349,9 @@ export default function NovaManifestacao() {
         <div className="max-w-4xl mx-auto w-full flex-1 flex flex-col">
           
           <div className="flex justify-end mb-2">
-            <span className="text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1 opacity-60">
-                <Save className="w-3 h-3" /> Rascunho automático
-            </span>
+              <span className="text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1 opacity-60">
+                  <Save className="w-3 h-3" /> Rascunho automático
+              </span>
           </div>
 
           {/* Passo 1: Tipo e Assunto */}
@@ -356,7 +367,7 @@ export default function NovaManifestacao() {
                 <div className={`flex items-center justify-between p-6 rounded-2xl w-full border transition-all duration-300 ${formData.anonimo ? "bg-card border-border shadow-sm" : "bg-muted/30 border-border"}`} onClick={() => handleFocus("anonimo")}>
                   <div className="space-y-1">
                     <Label className="text-lg font-semibold text-foreground flex items-center gap-2">
-                      {formData.anonimo && <VenetianMask className="w-5 h-5 text-muted-foreground" />} Deseja anonimato?
+                      {formData.anonimo ? <VenetianMask className="w-5 h-5 text-muted-foreground" /> : <ShieldCheck className="w-5 h-5 text-muted-foreground" />} Deseja anonimato?
                     </Label>
                     <p className="text-muted-foreground">Seus dados pessoais não serão revelados</p>
                   </div>
@@ -386,7 +397,6 @@ export default function NovaManifestacao() {
                   <Select value={formData.assunto} onValueChange={handleAssuntoChange} onOpenChange={(open) => open && handleFocus("assunto")}>
                     <SelectTrigger className="!w-full !h-14 !px-4 !py-2 !text-lg !bg-background !border-border !rounded-xl"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                     <SelectContent>
-                      {/* LÓGICA DE CARREGAMENTO CORRIGIDA */}
                       {assuntosLoading ? (
                           <SelectItem value="loading" disabled>Carregando assuntos...</SelectItem>
                       ) : assuntos.length > 0 ? (
@@ -435,12 +445,22 @@ export default function NovaManifestacao() {
                       <div key={key} className="space-y-3" onClick={() => handleFocus(`dinamico_${key}`)}>
                         <Label className="text-base font-semibold text-foreground">{config.label} {config.obrigatorio && "*"}</Label>
                         {config.tipo === "select" ? (
-                          <Select onValueChange={(val) => setDynamicData({ ...dynamicData, [key]: val })} onOpenChange={(open) => open && handleFocus(`dinamico_${key}`)}>
+                          <Select 
+                            value={dynamicData[key] || ""} 
+                            onValueChange={(val) => setDynamicData({ ...dynamicData, [key]: val })} 
+                            onOpenChange={(open) => open && handleFocus(`dinamico_${key}`)}
+                          >
                             <SelectTrigger className="!w-full !h-14 !px-4 !py-2 !text-lg !bg-background !border-border !rounded-xl"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                             <SelectContent>{config.opcoes?.map((opt: string) => (<SelectItem key={opt} value={opt}>{opt}</SelectItem>))}</SelectContent>
                           </Select>
                         ) : (
-                          <Input className="h-14 px-4 py-2 text-lg bg-background border-border text-foreground rounded-xl" type={config.tipo === "date" ? "date" : "text"} onChange={e => setDynamicData({...dynamicData, [key]: e.target.value})} onFocus={() => handleFocus(`dinamico_${key}`)} />
+                          <Input 
+                            className="h-14 px-4 py-2 text-lg bg-background border-border text-foreground rounded-xl" 
+                            type={config.tipo === "date" ? "date" : "text"} 
+                            value={dynamicData[key] || ""}
+                            onChange={e => setDynamicData({...dynamicData, [key]: e.target.value})} 
+                            onFocus={() => handleFocus(`dinamico_${key}`)} 
+                          />
                         )}
                       </div>
                     ))}
@@ -458,28 +478,93 @@ export default function NovaManifestacao() {
               <div className="text-center space-y-3 mb-6"><h2 className="text-3xl font-bold text-foreground">Anexar Arquivos</h2><p className="text-lg text-muted-foreground">Envie comprovantes. Opcional.</p></div>
               <div className="w-full space-y-6" onClick={() => handleFocus("anexos")}>
                 <div className="border-2 border-dashed border-border bg-muted/20 rounded-2xl p-8 text-center hover:bg-muted/40 transition-colors group cursor-pointer"><input type="file" id="file-upload" multiple className="hidden" onChange={handleFileChange} accept="image/*,video/*,audio/*,application/pdf" /><label htmlFor="file-upload" className="cursor-pointer w-full h-full block"><div className="flex flex-col items-center gap-3"><UploadCloud className="w-12 h-12 text-muted-foreground group-hover:text-primary transition-colors" /><p className="text-lg font-medium text-foreground group-hover:text-primary">Clique para selecionar</p><p className="text-sm text-muted-foreground">Máximo de {MAX_SIZE_MB}MB.</p></div></label></div>
+                
+                {/* BARRA DE PROGRESSO + AVISO */}
+                <div className="space-y-2">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Uso de armazenamento</span>
+                        <span>{formatBytes(totalSize)} / {MAX_SIZE_MB} MB</span>
+                    </div>
+                    <Progress value={progressPercentage} className={progressPercentage > 90 ? "bg-red-200 [&>div]:bg-red-500" : ""} />
+                </div>
+
+                <div className="flex items-center justify-center gap-2 p-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    <p className="text-xs text-amber-700 font-medium">Atenção: Arquivos anexados não são salvos no rascunho automático.</p>
+                </div>
+
                 {files.length > 0 && <div className="bg-card border border-border rounded-xl p-4 space-y-3">{files.map((file, index) => (<div key={index} className="flex items-center justify-between p-3 bg-muted/20 rounded-lg border border-border"><div className="flex items-center gap-3 truncate">{getFileIcon(file.type)}<span className="text-foreground font-medium truncate max-w-[200px]">{file.name}</span></div><button onClick={() => removeFile(index)} className="text-muted-foreground hover:text-destructive"><XCircle className="w-5 h-5" /></button></div>))}</div>}
               </div>
             </div>
           )}
 
-          {/* Passo 5: Confirmação */}
+          {/* === PASSO 5: LAYOUT NOVO (CARD IGUAL AO DA IMAGEM) === */}
           {step === 5 && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-right-4 flex-1">
-              <div className="text-center space-y-3 mb-10"><h2 className="text-3xl font-bold text-foreground">Dados do Manifestante</h2><p className="text-lg text-muted-foreground">Confirme seus dados.</p></div>
-              <div className="space-y-6 w-full">
-                <div className="p-8 bg-card rounded-3xl border border-border space-y-6 shadow-sm">
-                  {formData.anonimo ? <div className="bg-muted/30 p-6 rounded-2xl border border-border text-center space-y-2"><h3 className="text-lg font-bold text-foreground">Identidade Preservada</h3><p className="text-muted-foreground">Manifestação <strong>ANÔNIMA</strong>.</p></div> : <div className="grid gap-2"><span className="text-sm text-muted-foreground font-bold tracking-wider">Nome</span><p className="text-xl font-medium text-foreground">{user?.nome}</p></div>}
-                  <div className="grid gap-2"><span className="text-sm text-muted-foreground font-bold tracking-wider">Resumo</span><p className="text-lg text-foreground flex items-center gap-2"><span className="font-semibold capitalize">{tiposManifestacao.find(t => t.valor === formData.classificacao)?.label}</span><span className="text-muted-foreground">•</span><span>{files.length} arquivo(s)</span></p></div>
-                </div>
-              </div>
+            <div className="w-full flex flex-col items-center animate-in zoom-in-95 duration-300">
+               <div className="text-center space-y-1 mb-6">
+                  <span className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase bg-muted px-2 py-1 rounded-full">Rascunho Automático</span>
+                  <h2 className="text-3xl font-bold text-foreground mt-2">Dados do Manifestante</h2>
+                  <p className="text-muted-foreground">Confirme seus dados.</p>
+               </div>
+
+               <div className="w-full bg-card rounded-[32px] border border-border shadow-xl p-8 space-y-8 relative overflow-hidden">
+                  {/* Decoração de fundo */}
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+
+                  <div className="space-y-1 relative z-10">
+                      <label className="text-xs font-bold text-muted-foreground tracking-wider uppercase">Nome</label>
+                      <p className="text-xl font-semibold text-foreground truncate">
+                          {formData.anonimo ? "Anônimo" : user?.nome || "Cidadão"}
+                      </p>
+                  </div>
+
+                  {/* NOVO CAMPO: E-MAIL */}
+                  {!formData.anonimo && (
+                    <div className="space-y-1 relative z-10">
+                        <label className="text-xs font-bold text-muted-foreground tracking-wider uppercase">E-mail</label>
+                        <p className="text-lg font-medium text-foreground truncate opacity-90">
+                            {user?.email || "email@exemplo.com"}
+                        </p>
+                    </div>
+                  )}
+
+                  <div className="space-y-1 relative z-10">
+                      <label className="text-xs font-bold text-muted-foreground tracking-wider uppercase">Resumo</label>
+                      <div className="flex items-center gap-2 text-lg text-foreground">
+                          <span className="font-medium capitalize">{tiposManifestacao.find(t => t.valor === formData.classificacao)?.label}</span>
+                          <span className="text-muted-foreground">•</span>
+                          <span>{files.length} arquivo(s)</span>
+                      </div>
+                  </div>
+
+                  <div className="h-px w-full bg-border/50" />
+
+                  {/* CHECKBOX DE CONCORDÂNCIA */}
+                  <div className="flex items-start space-x-3 pt-2">
+                      <Checkbox 
+                        id="terms" 
+                        checked={termsAccepted} 
+                        onCheckedChange={(c) => setTermsAccepted(c as boolean)}
+                        className="mt-1 data-[state=checked]:bg-primary border-primary"
+                      />
+                      <label htmlFor="terms" className="text-sm text-muted-foreground leading-snug cursor-pointer select-none">
+                          Declaro que as informações acima são verdadeiras e estou ciente de que falsidade ideológica é crime (Art. 299 CP).
+                      </label>
+                  </div>
+               </div>
             </div>
           )}
 
           {/* Botões */}
           <div className="pt-10 mt-auto border-t border-border flex justify-between items-center gap-4 w-full">
             <Button variant="outline" onClick={handleBack} className="h-12 md:h-14 px-4 md:px-8 text-base md:text-lg font-medium border-border text-muted-foreground hover:bg-muted rounded-xl">Voltar</Button>
-            <Button onClick={step === 5 ? handleSubmit : handleNext} disabled={isLoading} className="h-12 md:h-14 px-6 md:px-10 text-base md:text-lg font-semibold bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl shadow-lg shadow-primary/20">{step === 5 ? (isLoading ? "Enviando..." : "Confirmar") : "Próxima Etapa"}</Button>
+            <Button 
+                onClick={step === 5 ? handleSubmit : handleNext} 
+                disabled={isLoading || (step === 5 && !termsAccepted)} 
+                className={`h-12 md:h-14 px-6 md:px-10 text-base md:text-lg font-semibold rounded-xl shadow-lg transition-all ${step === 5 ? 'bg-[#21348e] hover:bg-[#1a2b75]' : 'bg-primary hover:bg-primary/90'} text-primary-foreground`}
+            >
+                {step === 5 ? (isLoading ? <Loader2 className="animate-spin" /> : "Confirmar") : "Próxima Etapa"}
+            </Button>
           </div>
         </div>
       </div>

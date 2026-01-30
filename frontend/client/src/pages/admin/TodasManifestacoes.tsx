@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Search, FileText, Calendar, Eye, 
-  Paperclip, Tag, XCircle, ShieldCheck, User, UserX 
+  Paperclip, Tag, XCircle, ShieldCheck, User, UserX, Filter 
 } from "lucide-react"; 
 import { toast } from "sonner";
 
@@ -55,6 +55,9 @@ export default function TodasManifestacoes() {
   const [statusFilter, setStatusFilter] = useState("todos");
   const [typeFilter, setTypeFilter] = useState("todos");
   const [anonimoFilter, setAnonimoFilter] = useState("todos"); // NOVO FILTRO
+
+  // --- NOVO: Estado para abrir/fechar filtros no mobile ---
+  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => { fetchTodas(); }, []);
 
@@ -133,7 +136,20 @@ export default function TodasManifestacoes() {
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+          {/* --- BOTÃO DE FILTROS (MOBILE) --- */}
+          <div className="md:hidden">
+            <Button 
+              variant="outline" 
+              className="w-full flex items-center justify-between"
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              <span className="flex items-center gap-2"><Filter size={16} /> Filtros</span>
+              <span className="text-xs text-muted-foreground">{showFilters ? "Ocultar" : "Mostrar"}</span>
+            </Button>
+          </div>
+
+          {/* Grid de Filtros VISÍVEIS (Lógica de exibição) */}
+          <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1 ${showFilters ? 'grid' : 'hidden md:grid'}`}>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="h-10 bg-background"><SelectValue placeholder="Status" /></SelectTrigger>
               <SelectContent>

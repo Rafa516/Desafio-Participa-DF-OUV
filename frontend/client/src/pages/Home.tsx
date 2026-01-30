@@ -25,6 +25,32 @@ const capitalize = (s: string) => {
     return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase().replace(/_/g, " ");
 };
 
+// Helper para formatar o texto da classificação corretamente
+const formatClassificacao = (tipo: string) => {
+    if (!tipo) return "Outro";
+    const map: Record<string, string> = {
+        RECLAMACAO: "Reclamação",
+        DENUNCIA: "Denúncia",
+        ELOGIO: "Elogio",
+        SUGESTAO: "Sugestão",
+        SOLICITACAO: "Solicitação",
+        INFORMACAO: "Informação"
+    };
+    return map[tipo.toUpperCase()] || capitalize(tipo);
+};
+
+// Helper para estilizar os badges
+const getClassificacaoStyle = (type: string) => {
+    const t = type?.toUpperCase();
+    if (t === 'ELOGIO') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+    if (t === 'DENUNCIA') return 'bg-red-100 text-red-700 border-red-200';
+    if (t === 'RECLAMACAO') return 'bg-orange-100 text-orange-700 border-orange-200';
+    if (t === 'SOLICITACAO') return 'bg-blue-100 text-blue-700 border-blue-200';
+    if (t === 'SUGESTAO') return 'bg-amber-100 text-amber-700 border-amber-200';
+    if (t === 'INFORMACAO') return 'bg-sky-100 text-sky-700 border-sky-200';
+    return 'bg-gray-100 text-gray-700 border-gray-200';
+};
+
 const getIconByType = (type: string) => {
     const t = type?.toUpperCase();
     if (t === 'ELOGIO') return <ThumbsUp className="w-5 h-5 text-emerald-500" />;
@@ -78,7 +104,6 @@ export default function Home() {
     return (
       <div className="space-y-8 animate-in fade-in duration-500 pb-10">
         
-        {/* AQUI: Linha (border-b) abaixo de tudo */}
         <section className="flex flex-col md:flex-row justify-between items-center py-6 border-b border-border gap-4">
           <div className="flex items-center gap-3 w-full md:w-auto justify-center md:justify-start">
             <div className="p-3 bg-primary/10 rounded-xl border border-primary/20">
@@ -90,7 +115,6 @@ export default function Home() {
             </div>
           </div>
           
-          {/* DATA: Centralizada no Mobile, Direita no Desktop */}
           <div className="w-full md:w-auto flex justify-center md:justify-end">
             <p className="text-xs font-medium text-muted-foreground/80 px-3 py-1 bg-muted/30 rounded-full border border-border/50">
                 {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
@@ -170,13 +194,11 @@ export default function Home() {
                                                 <p className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">
                                                     {capitalize(item.assunto?.nome) || "Assunto não informado"}
                                                 </p>
+                                                
+                                                {/* --- CORREÇÃO DE BADGES AQUI --- */}
                                                 {item.classificacao && (
-                                                    <span className={`text-[9px] uppercase tracking-wide font-bold px-1.5 py-0.5 rounded border ${
-                                                        item.classificacao?.toUpperCase() === 'ELOGIO' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 
-                                                        item.classificacao?.toUpperCase() === 'DENUNCIA' ? 'bg-red-50 text-red-600 border-red-200' :
-                                                        'bg-gray-50 text-gray-600 border-gray-200'
-                                                    }`}>
-                                                        {item.classificacao}
+                                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${getClassificacaoStyle(item.classificacao)}`}>
+                                                        {formatClassificacao(item.classificacao)}
                                                     </span>
                                                 )}
                                             </div>
@@ -239,11 +261,7 @@ export default function Home() {
   // --- VISÃO 2: CIDADÃO ---
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      
-      {/* Hero Section */}
-      {/* AQUI: Border-b no section para a linha cruzar a tela toda (Igual Admin) */}
       <section className="relative py-6 border-b border-border">
-        
         <div className="text-center space-y-4">
             <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">
             Sua voz transforma <br />
@@ -254,19 +272,13 @@ export default function Home() {
             </p>
         </div>
 
-        {/* DATA: 
-            - Mobile: w-full flex justify-center (Centralizado)
-            - Desktop (md): absolute right-0 bottom-6 (Canto direito, acima da linha)
-        */}
         <div className="w-full flex justify-center mt-4 md:mt-0 md:w-auto md:absolute md:right-0 md:bottom-6">
             <p className="text-xs font-medium text-muted-foreground/80 px-3 py-1 bg-muted/30 rounded-full border border-border/50 whitespace-nowrap">
                 {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
         </div>
-
       </section>
 
-      {/* Quick Actions Grid */}
       <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Link href="/nova-manifestacao?type=texto">
           <div className="bg-card border border-border shadow-sm rounded-2xl flex flex-col items-center justify-center gap-3 h-32 w-full cursor-pointer hover:scale-[1.02] hover:border-primary/50 transition-all hover:shadow-md group">
@@ -302,7 +314,6 @@ export default function Home() {
         </Link>
       </section>
 
-      {/* Destaques (Cards Informativos) */}
       <section className="space-y-4">
         <div className="flex items-center justify-between px-1">
           <h3 className="text-xl font-bold text-foreground">Destaques</h3>
