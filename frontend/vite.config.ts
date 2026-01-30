@@ -4,21 +4,17 @@ import path from "node:path";
 import { defineConfig } from "vite"; 
 import { VitePWA } from "vite-plugin-pwa"; 
 
-// SEM O IMPORT DO TAILWIND AQUI (Isso está correto, removemos o plugin da v4)
-
 const plugins = [
   react(),
   jsxLocPlugin(),
-  // SEM O tailwindcss() AQUI (Correto também)
-  
   VitePWA({
     registerType: 'autoUpdate',
-    includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+    includeAssets: ['pwa-192x192.png', 'pwa-512x512.png'], // Ativos que você já tem na public
     manifest: {
-      name: 'ParticipaDF-Ouvidoria', 
-      short_name: 'ParticipaDF-Ouvidoria',
+      name: 'ParticipaDF - Ouvidoria', 
+      short_name: 'ParticipaDF', // Nome mais curto para não cortar no celular
       description: 'Plataforma de ouvidoria acessível e multicanal do Distrito Federal',
-      theme_color: '#ffffff',
+      theme_color: '#21348e', // Azul oficial do ParticipaDF
       background_color: '#ffffff',
       display: 'standalone',
       orientation: 'portrait',
@@ -55,9 +51,7 @@ const plugins = [
               maxEntries: 10,
               maxAgeSeconds: 60 * 60 * 24 * 365
             },
-            cacheableResponse: {
-              statuses: [0, 200]
-            }
+            cacheableResponse: { statuses: [0, 200] }
           }
         },
         {
@@ -69,9 +63,7 @@ const plugins = [
               maxEntries: 10,
               maxAgeSeconds: 60 * 60 * 24 * 365
             },
-            cacheableResponse: {
-              statuses: [0, 200]
-            }
+            cacheableResponse: { statuses: [0, 200] }
           }
         }
       ]

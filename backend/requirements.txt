@@ -1,0 +1,48 @@
+# FastAPI e dependências
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
+email-validator>=2.1.0
+
+# Banco de dados
+sqlalchemy>=2.0.30
+psycopg2-binary>=2.9.9
+alembic>=1.13.0
+
+# Cache e sessões
+redis>=5.0.1
+
+# Autenticação e segurança
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+bcrypt
+python-multipart>=0.0.9
+
+# Integração com APIs externas
+httpx>=0.27.0
+aiohttp>=3.10.5
+
+# Processamento de mídia
+pillow>=11.0.0
+
+# Variáveis de ambiente
+python-dotenv>=1.0.0
+
+# Logging
+python-json-logger>=2.0.7
+
+# Testes
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
+
+# Linting e formatação
+black>=24.3.0
+flake8>=7.0.0
+isort>=5.13.2
+mypy>=1.9.0
+
+# Documentação
+mkdocs>=1.5.3
+mkdocs-material>=9.5.0
