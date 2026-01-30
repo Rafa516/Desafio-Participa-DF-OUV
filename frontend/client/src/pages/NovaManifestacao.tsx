@@ -66,15 +66,12 @@ export default function NovaManifestacao() {
 
   const [termsAccepted, setTermsAccepted] = useState(false);
 
-  // --- ESTADOS PARA O RECONHECIMENTO DE VOZ ---
+  // --- ESTADOS PARA O RECONHECIMENTO DE VOZ NATIVO (WEB SPEECH API) ---
   const [isRecording, setIsRecording] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const recognitionRef = useRef<any>(null); // Referência para o objeto de reconhecimento
 
   // Refs da Dora
   const doraTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  // Memória dos passos onde a Dora já abriu automaticamente
   const stepsVisitedRef = useRef<Set<number>>(new Set());
 
   const totalSize = files.reduce((acc, file) => acc + file.size, 0);
@@ -91,43 +88,31 @@ export default function NovaManifestacao() {
     ? tiposManifestacao.filter(t => ['reclamacao', 'denuncia'].includes(t.valor))
     : tiposManifestacao;
 
-  // --- FIX: RESETAR DORA AO SAIR DA PÁGINA ---
   useEffect(() => {
     return () => {
         setMode("assistente"); 
         setIsOpen(false);      
         setCurrentField(null); 
         if (doraTimeoutRef.current) clearTimeout(doraTimeoutRef.current);
+        // Garante que o microfone pare se o usuário sair da página
+        if (recognitionRef.current) recognitionRef.current.stop();
     };
   }, []);
 
-  // --- EFEITO DORA INTELIGENTE (COM CONTEXTO DO ASSUNTO) ---
   useEffect(() => {
     if (doraTimeoutRef.current) clearTimeout(doraTimeoutRef.current);
-
     let contextKey = "";
     const assuntoNome = selectedAssunto?.nome || "";
 
-    // Aqui geramos chaves inteligentes para a Dora saber o que falar
     if (step === 1) contextKey = "step1_inicio"; 
-    
-    if (step === 2) {
-       // Se tiver assunto selecionado, manda ele (ex: "step2_Saúde")
-       // Se não, manda genérico
-       contextKey = assuntoNome ? `step2_${assuntoNome}` : "step2_generico";
-    }
-    
-    if (step === 3) {
-       contextKey = assuntoNome ? `step3_${assuntoNome}` : "step3_generico";
-    }
-    
+    if (step === 2) contextKey = assuntoNome ? `step2_${assuntoNome}` : "step2_generico";
+    if (step === 3) contextKey = assuntoNome ? `step3_${assuntoNome}` : "step3_generico";
     if (step === 4) contextKey = "step4_arquivos";      
     if (step === 5) contextKey = "step5_confirmacao";
 
     setMode("guide");
-    setCurrentField(contextKey); // Envia a chave composta para o ChatbotAssistente
+    setCurrentField(contextKey);
     
-    // Lógica de Abertura Única por Passo
     if (!stepsVisitedRef.current.has(step)) {
         stepsVisitedRef.current.add(step);
         if (!isRecording) {
@@ -139,7 +124,6 @@ export default function NovaManifestacao() {
     }
   }, [step, setMode, setCurrentField, setIsOpen, selectedAssunto]);
   
-  // --- CARREGAMENTO INICIAL ---
   useEffect(() => {
     const init = async () => {
         try {
@@ -149,7 +133,6 @@ export default function NovaManifestacao() {
             const lista = data.assuntos || (Array.isArray(data) ? data : []);
             setAssuntos(lista);
 
-            // Recupera Rascunho
             const saved = localStorage.getItem(STORAGE_KEY);
             if (saved) {
                 const parsed = JSON.parse(saved);
@@ -200,48 +183,60 @@ export default function NovaManifestacao() {
     setActiveField(fieldName);
   };
 
-  const toggleRecording = async () => {
-    if (isRecording) {
-        mediaRecorderRef.current?.stop();
-        setIsRecording(false);
-    } else {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mediaRecorder = new MediaRecorder(stream);
-            mediaRecorderRef.current = mediaRecorder;
-            chunksRef.current = [];
+  // --- NOVA LÓGICA DE DITADO POR VOZ (LEVE E NATIVO) ---
+  const toggleRecording = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-            mediaRecorder.ondataavailable = (e) => {
-                if (e.data.size > 0) chunksRef.current.push(e.data);
-            };
-
-            mediaRecorder.onstop = async () => {
-                const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
-                await sendAudioToBackend(audioBlob);
-                stream.getTracks().forEach(track => track.stop());
-            };
-
-            mediaRecorder.start();
-            setIsRecording(true);
-            toast.info("Gravando...");
-        } catch (error) { toast.error("Erro no microfone."); }
+    if (!SpeechRecognition) {
+      toast.error("Seu navegador não suporta ditado por voz.");
+      return;
     }
-  };
 
-  const sendAudioToBackend = async (audioBlob: Blob) => {
-      setIsTranscribing(true);
-      const formDataAudio = new FormData();
-      formDataAudio.append("arquivo", audioBlob, "gravacao.webm");
-      try {
-          const res = await api.post("/transcricao/", formDataAudio, { headers: { "Content-Type": "multipart/form-data" } });
-          const texto = res.data.texto;
-          if (texto) {
-              const spacer = (formData.descricao && !formData.descricao.endsWith(' ')) ? ' ' : '';
-              setFormData(prev => ({ ...prev, descricao: prev.descricao + spacer + texto }));
-              toast.success("Transcrito!");
-          }
-      } catch (error) { toast.error("Erro na transcrição."); } 
-      finally { setIsTranscribing(false); }
+    if (isRecording) {
+      recognitionRef.current?.stop();
+      setIsRecording(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognitionRef.current = recognition;
+
+      recognition.lang = 'pt-BR';
+      recognition.continuous = true;
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+        setIsRecording(true);
+        toast.info("Ouvindo... Pode falar.");
+      };
+
+      recognition.onresult = (event: any) => {
+        const transcricao = event.results[event.results.length - 1][0].transcript;
+        if (transcricao) {
+          const spacer = (formData.descricao && !formData.descricao.endsWith(' ')) ? ' ' : '';
+          setFormData(prev => ({ 
+            ...prev, 
+            descricao: prev.descricao + spacer + transcricao 
+          }));
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error("Erro no reconhecimento:", event.error);
+        setIsRecording(false);
+        if(event.error !== 'no-speech') toast.error("Erro no microfone.");
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+
+      recognition.start();
+    } catch (error) {
+      setIsRecording(false);
+      toast.error("Erro ao iniciar microfone.");
+    }
   };
 
   const handleAssuntoChange = (id: string) => {
@@ -276,7 +271,7 @@ export default function NovaManifestacao() {
       if (!formData.assunto) return toast.error("Selecione um assunto.");
     }
     if (step === 2) {
-      if (isRecording) return toast.warning("Pare a gravação antes de continuar.");
+      if (isRecording) return toast.warning("Pare o ditado antes de continuar.");
       if (!formData.descricao) return toast.error("Descreva o ocorrido.");
       if (formData.descricao.trim().length < 10) return toast.error("Descrição muito curta (mínimo 10 caracteres).");
     }
@@ -309,7 +304,6 @@ export default function NovaManifestacao() {
 
   const handleSubmit = async () => {
     if (!termsAccepted) return toast.error("Você precisa aceitar a declaração de veracidade.");
-
     setIsLoading(true);
     const data = new FormData();
     data.append("classificacao", formData.classificacao);
@@ -318,7 +312,6 @@ export default function NovaManifestacao() {
     data.append("anonimo", String(formData.anonimo));
     data.append("dados_complementares", JSON.stringify(dynamicData));
     files.forEach((file) => data.append("arquivos", file));
-
     try {
       const result = await manifestacaoService.criarManifestacao(data);
       localStorage.removeItem(STORAGE_KEY); 
@@ -335,8 +328,6 @@ export default function NovaManifestacao() {
 
   return (
     <div className="w-full h-full flex flex-col animate-in slide-in-from-bottom-4 duration-500 relative">
-      
-      {/* Wizard */}
       <div className="flex items-center justify-center mb-8 px-4 relative">
         <div className="flex gap-3">
           {[1, 2, 3, 4, 5].map((s) => (
@@ -347,23 +338,19 @@ export default function NovaManifestacao() {
 
       <div className="flex-1 bg-card rounded-3xl shadow-sm border border-border p-8 md:p-12 min-h-[600px] flex flex-col">
         <div className="max-w-4xl mx-auto w-full flex-1 flex flex-col">
-          
           <div className="flex justify-end mb-2">
               <span className="text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1 opacity-60">
                   <Save className="w-3 h-3" /> Rascunho automático
               </span>
           </div>
 
-          {/* Passo 1: Tipo e Assunto */}
           {step === 1 && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 flex-1">
               <div className="text-center space-y-3 mb-6">
                 <h2 className="text-3xl font-bold text-foreground">O que você deseja fazer?</h2>
                 <p className="text-lg text-muted-foreground">Escolha o tipo e o assunto da sua manifestação.</p>
               </div>
-
               <div className={`grid gap-8 w-full transition-all duration-500 ${formData.anonimo ? "bg-muted/30 p-8 rounded-3xl border-2 border-border shadow-inner" : "bg-card"}`}>
-                
                 <div className={`flex items-center justify-between p-6 rounded-2xl w-full border transition-all duration-300 ${formData.anonimo ? "bg-card border-border shadow-sm" : "bg-muted/30 border-border"}`} onClick={() => handleFocus("anonimo")}>
                   <div className="space-y-1">
                     <Label className="text-lg font-semibold text-foreground flex items-center gap-2">
@@ -373,7 +360,6 @@ export default function NovaManifestacao() {
                   </div>
                   <Switch checked={formData.anonimo} onCheckedChange={c => { setFormData({...formData, anonimo: c}); handleFocus("anonimo"); }} className="data-[state=checked]:bg-primary scale-125 mr-2" />
                 </div>
-
                 {formData.anonimo && (
                   <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex gap-3 items-start">
                     <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
@@ -383,7 +369,6 @@ export default function NovaManifestacao() {
                     </div>
                   </div>
                 )}
-
                 <div className="space-y-3 w-full" onClick={() => handleFocus("classificacao")}>
                   <Label className="text-base font-semibold text-foreground">Tipo de Manifestação</Label>
                   <Select value={formData.classificacao} onValueChange={(val) => { setFormData({...formData, classificacao: val}); handleFocus("classificacao"); }} onOpenChange={(open) => open && handleFocus("classificacao")}>
@@ -391,7 +376,6 @@ export default function NovaManifestacao() {
                     <SelectContent>{tiposDisponiveis.map((tipo) => (<SelectItem key={tipo.valor} value={tipo.valor}>{tipo.label}</SelectItem>))}</SelectContent>
                   </Select>
                 </div>
-
                 <div className="space-y-3 w-full" onClick={() => handleFocus("assunto")}>
                   <Label className="text-base font-semibold text-foreground">Assunto</Label>
                   <Select value={formData.assunto} onValueChange={handleAssuntoChange} onOpenChange={(open) => open && handleFocus("assunto")}>
@@ -411,7 +395,6 @@ export default function NovaManifestacao() {
             </div>
           )}
 
-          {/* Passo 2: Descrição + VOZ */}
           {step === 2 && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 flex-1">
               <div className="text-center space-y-3 mb-6">
@@ -421,20 +404,19 @@ export default function NovaManifestacao() {
               <div className="w-full space-y-3 relative">
                 <div className="flex justify-between items-end mb-2">
                     <Label className="text-base font-semibold text-foreground">Descrição Detalhada</Label>
-                    <Button type="button" variant={isRecording ? "destructive" : "outline"} size="sm" onClick={toggleRecording} disabled={isTranscribing} className={`gap-2 transition-all ${isRecording ? "animate-pulse" : ""}`}>
-                        {isTranscribing ? <><Loader2 className="animate-spin w-4 h-4" /> Transcrevendo...</> : isRecording ? <><MicOff size={16} /> Parar e Transcrever</> : <><Mic size={16} /> Ditado por Voz</>}
+                    <Button type="button" variant={isRecording ? "destructive" : "outline"} size="sm" onClick={toggleRecording} className={`gap-2 transition-all ${isRecording ? "animate-pulse" : ""}`}>
+                        {isRecording ? <><MicOff size={16} /> Parar Ditado</> : <><Mic size={16} /> Ditado por Voz</>}
                     </Button>
                 </div>
                 <div className="relative">
-                    {isRecording && <div className="absolute top-2 right-2 flex items-center gap-2 bg-red-100 text-red-600 px-3 py-1 rounded-full text-xs font-bold z-10 border border-red-200 shadow-sm"><div className="w-2 h-2 bg-red-600 rounded-full animate-ping" />Gravando...</div>}
-                    <Textarea placeholder="Descreva aqui..." className="min-h-[250px] p-6 text-lg bg-background border-border text-foreground rounded-2xl resize-none focus:ring-2 focus:ring-primary/20" value={formData.descricao} onChange={e => setFormData({...formData, descricao: e.target.value})} onFocus={() => handleFocus("descricao")} disabled={isTranscribing} />
+                    {isRecording && <div className="absolute top-2 right-2 flex items-center gap-2 bg-red-100 text-red-600 px-3 py-1 rounded-full text-xs font-bold z-10 border border-red-200 shadow-sm"><div className="w-2 h-2 bg-red-600 rounded-full animate-ping" />Ouvindo...</div>}
+                    <Textarea placeholder="Descreva aqui..." className="min-h-[250px] p-6 text-lg bg-background border-border text-foreground rounded-2xl resize-none focus:ring-2 focus:ring-primary/20" value={formData.descricao} onChange={e => setFormData({...formData, descricao: e.target.value})} onFocus={() => handleFocus("descricao")} />
                 </div>
                 <div className={`text-right text-sm mt-2 ${formData.descricao.length < 10 ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>{formData.descricao.length} caracteres</div>
               </div>
             </div>
           )}
 
-          {/* Passo 3: Dados Complementares */}
           {step === 3 && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 flex-1">
               <div className="text-center space-y-3 mb-10"><h2 className="text-3xl font-bold text-foreground">Dados da Ocorrência</h2><p className="text-lg text-muted-foreground">Preencha as informações complementares.</p></div>
@@ -472,14 +454,11 @@ export default function NovaManifestacao() {
             </div>
           )}
 
-          {/* Passo 4: Upload */}
           {step === 4 && (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 flex-1">
               <div className="text-center space-y-3 mb-6"><h2 className="text-3xl font-bold text-foreground">Anexar Arquivos</h2><p className="text-lg text-muted-foreground">Envie comprovantes. Opcional.</p></div>
               <div className="w-full space-y-6" onClick={() => handleFocus("anexos")}>
                 <div className="border-2 border-dashed border-border bg-muted/20 rounded-2xl p-8 text-center hover:bg-muted/40 transition-colors group cursor-pointer"><input type="file" id="file-upload" multiple className="hidden" onChange={handleFileChange} accept="image/*,video/*,audio/*,application/pdf" /><label htmlFor="file-upload" className="cursor-pointer w-full h-full block"><div className="flex flex-col items-center gap-3"><UploadCloud className="w-12 h-12 text-muted-foreground group-hover:text-primary transition-colors" /><p className="text-lg font-medium text-foreground group-hover:text-primary">Clique para selecionar</p><p className="text-sm text-muted-foreground">Máximo de {MAX_SIZE_MB}MB.</p></div></label></div>
-                
-                {/* BARRA DE PROGRESSO + AVISO */}
                 <div className="space-y-2">
                     <div className="flex justify-between text-xs text-muted-foreground">
                         <span>Uso de armazenamento</span>
@@ -487,18 +466,15 @@ export default function NovaManifestacao() {
                     </div>
                     <Progress value={progressPercentage} className={progressPercentage > 90 ? "bg-red-200 [&>div]:bg-red-500" : ""} />
                 </div>
-
                 <div className="flex items-center justify-center gap-2 p-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
                     <AlertTriangle className="w-4 h-4 text-amber-600" />
                     <p className="text-xs text-amber-700 font-medium">Atenção: Arquivos anexados não são salvos no rascunho automático.</p>
                 </div>
-
                 {files.length > 0 && <div className="bg-card border border-border rounded-xl p-4 space-y-3">{files.map((file, index) => (<div key={index} className="flex items-center justify-between p-3 bg-muted/20 rounded-lg border border-border"><div className="flex items-center gap-3 truncate">{getFileIcon(file.type)}<span className="text-foreground font-medium truncate max-w-[200px]">{file.name}</span></div><button onClick={() => removeFile(index)} className="text-muted-foreground hover:text-destructive"><XCircle className="w-5 h-5" /></button></div>))}</div>}
               </div>
             </div>
           )}
 
-          {/* === PASSO 5: LAYOUT NOVO (CARD IGUAL AO DA IMAGEM) === */}
           {step === 5 && (
             <div className="w-full flex flex-col items-center animate-in zoom-in-95 duration-300">
                <div className="text-center space-y-1 mb-6">
@@ -506,28 +482,18 @@ export default function NovaManifestacao() {
                   <h2 className="text-3xl font-bold text-foreground mt-2">Dados do Manifestante</h2>
                   <p className="text-muted-foreground">Confirme seus dados.</p>
                </div>
-
                <div className="w-full bg-card rounded-[32px] border border-border shadow-xl p-8 space-y-8 relative overflow-hidden">
-                  {/* Decoração de fundo */}
                   <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-
                   <div className="space-y-1 relative z-10">
                       <label className="text-xs font-bold text-muted-foreground tracking-wider uppercase">Nome</label>
-                      <p className="text-xl font-semibold text-foreground truncate">
-                          {formData.anonimo ? "Anônimo" : user?.nome || "Cidadão"}
-                      </p>
+                      <p className="text-xl font-semibold text-foreground truncate">{formData.anonimo ? "Anônimo" : user?.nome || "Cidadão"}</p>
                   </div>
-
-                  {/* NOVO CAMPO: E-MAIL */}
                   {!formData.anonimo && (
                     <div className="space-y-1 relative z-10">
                         <label className="text-xs font-bold text-muted-foreground tracking-wider uppercase">E-mail</label>
-                        <p className="text-lg font-medium text-foreground truncate opacity-90">
-                            {user?.email || "email@exemplo.com"}
-                        </p>
+                        <p className="text-lg font-medium text-foreground truncate opacity-90">{user?.email || "email@exemplo.com"}</p>
                     </div>
                   )}
-
                   <div className="space-y-1 relative z-10">
                       <label className="text-xs font-bold text-muted-foreground tracking-wider uppercase">Resumo</label>
                       <div className="flex items-center gap-2 text-lg text-foreground">
@@ -536,10 +502,7 @@ export default function NovaManifestacao() {
                           <span>{files.length} arquivo(s)</span>
                       </div>
                   </div>
-
                   <div className="h-px w-full bg-border/50" />
-
-                  {/* CHECKBOX DE CONCORDÂNCIA */}
                   <div className="flex items-start space-x-3 pt-2">
                       <Checkbox 
                         id="terms" 
@@ -555,7 +518,6 @@ export default function NovaManifestacao() {
             </div>
           )}
 
-          {/* Botões */}
           <div className="pt-10 mt-auto border-t border-border flex justify-between items-center gap-4 w-full">
             <Button variant="outline" onClick={handleBack} className="h-12 md:h-14 px-4 md:px-8 text-base md:text-lg font-medium border-border text-muted-foreground hover:bg-muted rounded-xl">Voltar</Button>
             <Button 
