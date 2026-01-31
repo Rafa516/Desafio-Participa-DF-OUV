@@ -29,6 +29,36 @@ Este documento detalha a especificação técnica para o desenvolvimento de uma 
 
 ---
 
+
+## Estrutura do Projeto
+
+```
+Desafio-Participa-DF-OUV/
+├── backend/                          # API FastAPI
+│   ├── app/
+│   │   ├── models/                   # Modelos de banco de dados
+│   │   ├── routes/                   # Endpoints da API
+│   │   ├── services/                 # Lógica de negócio
+│   │   ├── integrations/             # Integrações externas
+│   │   └── middleware/               # Middlewares
+│   ├── README.md                     # Documentação do backend
+│   ├── requirements.txt              # Dependências Python
+│   └── seed_assuntos.py              # Script para popular banco com assuntos
+├── frontend/                         # Aplicação React PWA
+│   ├── client/                       # Código-fonte React
+│   └── ideas.md                      # Brainstorming de design
+├── docs/                             # Documentação
+│   ├── Análise da Estrutura do Participa DF OUV.md
+│   ├── DESIGN.md                     # Design System
+│   ├── banco de dados/               # Documentação de BD
+│   ├── diagramas/                    # Diagramas técnicos
+│   ├── manuais/                      # Manuais de uso
+│   └── normativas/                   # Referências legais
+├── docker-compose.yml                # Orquestração de serviços
+├── Dockerfile                        # Imagem Docker do backend
+└── env.example                       # Variáveis de ambiente de exemplo
+```
+---
 ## 2. Arquitetura da Solução
 
 A arquitetura proposta desacopla o frontend do backend, garantindo escalabilidade, manutenibilidade e uma melhor experiência de desenvolvimento. A stack tecnológica foi escolhida para atender aos requisitos de performance, PWA e integração.
