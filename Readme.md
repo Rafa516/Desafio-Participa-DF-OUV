@@ -11,6 +11,9 @@
 ---
 
 >**Link do Projeto:** https://participadf-ouvidoria-app.onrender.com/login
+- **Usuário admin** 
+- Login: 001.001.001-01
+- Senha: admin123
 
 >**Documentação da API (Swagger):** https://participadf-backend.onrender.com/docs#/
 
