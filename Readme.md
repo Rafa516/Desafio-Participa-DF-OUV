@@ -12,7 +12,7 @@
 
 >**Link do Projeto:** https://participadf-ouvidoria-app.onrender.com/login
 
->:**Documentação da API (Swagger):** https://participadf-backend.onrender.com/docs#/
+>**Documentação da API (Swagger):** https://participadf-backend.onrender.com/docs#/
 
 ## 1. Introdução e Objetivos
 
