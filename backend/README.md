@@ -80,25 +80,38 @@ backend/
 
 ## Endpoints Principais
 
-### Health Check
-- `GET /api/health` - Verificar saúde da API
+### Health
+- `GET /health` - Health Check
+
+### Autenticação
+- `POST /api/auth/registrar` - Registrar Usuário
+- `POST /api/auth/login` - Login
+- `POST /api/auth/marcar-lido` - Marcar Notificações Lidas
+- `PUT /api/auth/atualizar-perfil` - Atualizar Meu Perfil
+- `POST /api/auth/esqueci-senha` - Solicitar Recuperação Senha
+- `POST /api/auth/redefinir-senha` - Redefinir Senha
 
 ### Assuntos
-- `GET /api/assuntos` - Listar todos os assuntos/categorias
-- `GET /api/assuntos/{id}` - Obter detalhes de um assunto específico
+- `GET /api/assuntos/` - Listar Assuntos
+- `POST /api/assuntos/` - Criar Assunto
+- `GET /api/assuntos/{assunto_id}` - Obter Assunto
+- `PUT /api/assuntos/{assunto_id}` - Atualizar Assunto
+- `DELETE /api/assuntos/{assunto_id}` - Deletar Assunto
 
 ### Manifestações
-- `POST /api/manifestacoes` - Criar manifestação
-- `GET /api/manifestacoes/{protocolo}` - Consultar manifestação
-- `GET /api/manifestacoes` - Listar manifestações
-
-### Movimentações (Histórico/Chat)
-- `GET /api/movimentacoes/{manifestacao_id}` - Listar histórico de uma manifestação
-- `POST /api/movimentacoes/{manifestacao_id}` - Adicionar resposta/mensagem a uma manifestação
+- `POST /api/manifestacoes/` - Criar Manifestação
+- `GET /api/manifestacoes/` - Listar Manifestações
+- `GET /api/manifestacoes/{protocolo}` - Consultar Manifestação
+- `GET /api/manifestacoes/admin/todas` - Listar Todas Admin
 
 ### Protocolos
-- `GET /api/protocolos/{numero}` - Rastrear protocolo
-- `POST /api/protocolos/gerar` - Gerar novo protocolo
+- `GET /api/protocolos/{numero}` - Rastrear Protocolo
+- `POST /api/protocolos/simular-geracao` - Simular Geração Protocolo
+
+### Movimentações
+- `GET /api/movimentacoes/notificacoes/novas` - Obter Notificações
+- `GET /api/movimentacoes/{manifestacao_id}` - Listar Histórico
+- `POST /api/movimentacoes/{manifestacao_id}` - Responder Manifestação
 
 ## Modelos de Dados
 

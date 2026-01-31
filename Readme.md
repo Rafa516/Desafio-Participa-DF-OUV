@@ -10,6 +10,10 @@
 - Breno Braga Galvão - <a href="https://www.linkedin.com/in/breno-braga-galv%C3%A3o/" target="blank">Linkedin<img src="https://raw.githubusercontent.com/rahuldkjain/github-profile-readme-generator/master/src/images/icons/Social/linked-in-alt.svg" alt="https://www.linkedin.com/in/rafael-da-silva-oliveira-623634184/" height="15" width="50" /></a>
 ---
 
+>**Link do Projeto:** https://participadf-ouvidoria-app.onrender.com/login
+
+>:**Documentação da API (Swagger):** https://participadf-backend.onrender.com/docs#/
+
 ## 1. Introdução e Objetivos
 
 Este documento detalha a especificação técnica para o desenvolvimento de uma solução digital inovadora e acessível para o **Participa DF**, em conformidade com o desafio da categoria **Ouvidoria** do 1º Hackathon em Controle Social. O objetivo é criar um Progressive Web App (PWA) que permita o registro de manifestações por texto, áudio, imagem e vídeo, com foco em acessibilidade, usabilidade e integração com a inteligência artificial IZA da Ouvidoria-Geral do DF.
@@ -238,6 +242,7 @@ flowchart LR
     classDef get fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#0d47a1
     classDef post fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#1b5e20
     classDef put fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#e65100
+    classDef delete fill:#ffebee,stroke:#c62828,stroke-width:2px,color:#b71c1c
     classDef client fill:#333,stroke:#000,stroke-width:2px,color:#fff
     
     %% Nó do Cliente
@@ -247,38 +252,61 @@ flowchart LR
     subgraph Auth ["Autenticação"]
         direction TB
         POST_LOGIN["POST /auth/login"]:::post
-        POST_REGISTER["POST /auth/register"]:::post
+        POST_REGISTER["POST /auth/registrar"]:::post
+        POST_MARCAR["POST /auth/marcar-lido"]:::post
+        PUT_PERFIL["PUT /auth/atualizar-perfil"]:::put
+        POST_ESQUECI["POST /auth/esqueci-senha"]:::post
+        POST_REDEF["POST /auth/redefinir-senha"]:::post
     end
 
-    %% Grupo 2: Manifestações
+    %% Grupo 2: Assuntos (CRUD)
+    subgraph Ass ["Assuntos"]
+        direction TB
+        GET_ASS["GET /assuntos/"]:::get
+        POST_ASS["POST /assuntos/"]:::post
+        GET_ASS_ID["GET /assuntos/{assunto_id}"]:::get
+        PUT_ASS["PUT /assuntos/{assunto_id}"]:::put
+        DEL_ASS["DELETE /assuntos/{assunto_id}"]:::delete
+    end
+
+    %% Grupo 3: Manifestações
     subgraph Man ["Manifestações"]
         direction TB
-        GET_MAN["GET /manifestacoes"]:::get
-        POST_MAN["POST /manifestacoes"]:::post
-        GET_MAN_ID["GET /manifestacoes/:id"]:::get
-        PUT_MAN["PUT /manifestacoes/:id"]:::put
+        POST_MAN["POST /manifestacoes/"]:::post
+        GET_MAN["GET /manifestacoes/"]:::get
+        GET_MAN_PROT["GET /manifestacoes/{protocolo}"]:::get
+        GET_MAN_ADMIN["GET /manifestacoes/admin/todas"]:::get
     end
 
-    %% Grupo 3: Movimentações
+    %% Grupo 4: Movimentações
     subgraph Mov ["Movimentações"]
         direction TB
-        GET_MOV["GET /movimentacoes<br/>/:manifestacao_id"]:::get
-        POST_MOV["POST /movimentacoes"]:::post
+        GET_NOT["GET /movimentacoes/notificacoes/novas"]:::get
+        GET_HIST["GET /movimentacoes/{manifestacao_id}"]:::get
+        POST_MOV["POST /movimentacoes/{manifestacao_id}"]:::post
     end
 
-    %% Grupo 4: Auxiliares
-    subgraph Aux ["Auxiliares"]
+    %% Grupo 5: Protocolos
+    subgraph Prot ["Protocolos"]
         direction TB
-        GET_ASS["GET /assuntos"]:::get
-        GET_PROT["GET /protocolos/gerar"]:::get
+        GET_PROT["GET /protocolos/{numero}"]:::get
+        POST_PROT["POST /protocolos/simular-geracao"]:::post
+    end
+
+    %% Grupo 6: Transcrição
+    subgraph Trans ["Transcrição"]
+        direction TB
+        POST_TRANS["POST /transcricao/"]:::post
     end
 
     %% --- Conexões ---
     %% Usamos links invisíveis ou diretos para organizar
     Client ===> Auth
+    Client ===> Ass
     Client ===> Man
     Client ===> Mov
-    Client ===> Aux
+    Client ===> Prot
+    Client ===> Trans
 
     %% Dica: LinkStyle deixa as setas mais suaves
     linkStyle default stroke:#b0bec5,stroke-width:2px
@@ -456,8 +484,8 @@ sequenceDiagram
 
 ## 7. Estratégia de Deploy
 
-- **Frontend (React)**: Deploy contínuo em uma plataforma de hospedagem estática Render a partir do repositório Git.
-- **Backend (FastAPI)**: Containerização com Docker e deploy com o Render.
+- **Frontend (React)**: Deploy contínuo no Render plataforma de hospedagem estática a partir do repositório Git.
+- **Backend (FastAPI)**: Containerização com Docker e deploy em uma plataforma como serviço (Render ou Google Cloud Run).
 - **CI/CD**: Configuração de um pipeline simples com GitHub Actions para automatizar os builds e deploys do frontend e backend a cada `push` na branch principal.
 
 ---

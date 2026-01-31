@@ -83,7 +83,7 @@ def criar_manifestacao(
             raise HTTPException(status_code=500, detail=f"Erro no upload: {str(e)}")
 
     try:
-        usuario_id = str(current_user.id) if not anonimo else None
+        usuario_id = str(current_user.id) if not anonimo else None # Usar None para manifestações anônimas'
 
         nova_manifestacao = ManifestacaoService.criar_manifestacao(
             db=db,
